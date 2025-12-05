@@ -26,6 +26,7 @@ import {
 interface GenerateRequest {
   selection: ABCDSelection;
   numImages?: number;
+  prompt?: string; // Optional custom prompt (from preview step)
 }
 
 interface GenerateResponse {
