@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Sparkles, Eye, ImageIcon, RefreshCw, Copy, Check, Loader2, StopCircle } from "lucide-react";
+import { Sparkles, Eye, ImageIcon, RefreshCw, Copy, Check, Loader2, StopCircle, Cloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,6 +13,7 @@ type WorkflowStep = "select" | "prompt" | "generate";
 interface GeneratedImage {
   id: string;
   url: string;
+  storageUrl: string | null;
   selected: boolean;
   status: "pending" | "generating" | "success" | "failed";
 }
@@ -110,6 +111,7 @@ export default function HomePage() {
     const initialImages: GeneratedImage[] = Array.from({ length: totalImages }, (_, i) => ({
       id: `img-${i + 1}`,
       url: "",
+      storageUrl: null,
       selected: false,
       status: "pending" as const,
     }));
@@ -139,16 +141,25 @@ export default function HomePage() {
             referenceImageUrl,
             imageIndex: i,
             totalImages,
+            creativeName, // Pass creativeName for auto-save
           }),
         });
 
         const data = await response.json();
 
         if (data.success && data.data.imageUrl) {
-          // Update with generated image
+          // Update with generated image (includes storageUrl from auto-save)
           setImages(prev => prev.map((img, idx) =>
-            idx === i ? { ...img, url: data.data.imageUrl, status: "success" as const } : img
+            idx === i ? {
+              ...img,
+              url: data.data.imageUrl,
+              storageUrl: data.data.storageUrl || null,
+              status: "success" as const
+            } : img
           ));
+          if (data.data.storageUrl) {
+            console.log(`Image ${i + 1} saved to: ${data.data.storageUrl}`);
+          }
         } else {
           // Mark as failed
           setImages(prev => prev.map((img, idx) =>
@@ -171,7 +182,7 @@ export default function HomePage() {
     }
 
     setIsGeneratingImages(false);
-  }, [editedPrompt, referenceImageUrl, shouldStop]);
+  }, [editedPrompt, referenceImageUrl, shouldStop, creativeName]);
 
   // Stop generation
   const handleStopGeneration = () => {
@@ -207,6 +218,7 @@ export default function HomePage() {
   const successCount = images.filter(img => img.status === "success").length;
   const failedCount = images.filter(img => img.status === "failed").length;
   const selectedCount = images.filter(img => img.selected).length;
+  const savedCount = images.filter(img => img.storageUrl).length;
 
   return (
     <div className="space-y-6">
@@ -360,7 +372,7 @@ export default function HomePage() {
                   </span>
                   <div className="flex items-center gap-3">
                     <span className="text-sm text-muted-foreground">
-                      ✓ {successCount} | ✗ {failedCount} | Selected: {selectedCount}
+                      ✓ {successCount} | ✗ {failedCount} | 💾 {savedCount} | Selected: {selectedCount}
                     </span>
                     {isGeneratingImages && (
                       <Button variant="destructive" size="sm" onClick={handleStopGeneration}>
@@ -424,6 +436,13 @@ export default function HomePage() {
                       <div className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
                         {index + 1}
                       </div>
+
+                      {/* Cloud saved indicator */}
+                      {image.storageUrl && (
+                        <div className="absolute bottom-1 right-1 bg-green-500/80 text-white p-0.5 rounded" title="Saved to cloud">
+                          <Cloud className="h-3 w-3" />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
