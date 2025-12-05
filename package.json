@@ -23,6 +23,8 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\""
   },
   "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "@supabase/supabase-js": "^2.39.0",
     "@tanstack/react-query": "^5.17.19",
     "@tremor/react": "^3.14.1",
     "class-variance-authority": "^0.7.0",

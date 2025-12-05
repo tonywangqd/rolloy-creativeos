@@ -11,30 +11,49 @@ import { StorageError } from '@/lib/types';
 // Environment Variables Validation
 // ============================================================================
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  throw new Error(
-    'Missing Supabase environment variables. Please check .env.local file.'
-  );
-}
 
 // ============================================================================
 // Client Instances
 // ============================================================================
 
 /**
+ * Check if Supabase is configured
+ */
+export function isSupabaseConfigured(): boolean {
+  return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+}
+
+/**
  * Public Supabase Client (Client-side & Server-side)
  * Uses anon key with RLS enabled
+ * Note: Client is created even without env vars to avoid build errors,
+ * but will fail at runtime if not configured
  */
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-  },
-});
+export const supabase = createClient(
+  SUPABASE_URL || 'https://placeholder.supabase.co',
+  SUPABASE_ANON_KEY || 'placeholder-key',
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+  }
+);
+
+/**
+ * Throws error if Supabase is not configured
+ * Call this before any Supabase operation
+ */
+export function requireSupabase(): void {
+  if (!isSupabaseConfigured()) {
+    throw new Error(
+      'Missing Supabase environment variables. Please check .env.local file.'
+    );
+  }
+}
 
 /**
  * Admin Supabase Client (Server-side only)
