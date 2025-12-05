@@ -46,7 +46,7 @@ export function CSVUploader({ onDataParsed }: CSVUploaderProps) {
           onDataParsed(results.data as AnalyticsData[]);
           setIsParsing(false);
         },
-        error: (error) => {
+        error: (error: Error) => {
           console.error("CSV parsing error:", error);
           setIsParsing(false);
         },

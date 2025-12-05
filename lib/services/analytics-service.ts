@@ -50,7 +50,7 @@ export async function parseCSV(csvContent: string): Promise<ParsedAdData[]> {
           );
         }
       },
-      error: (error) => {
+      error: (error: Error) => {
         reject(new ValidationError('CSV parsing error', error));
       },
     });
