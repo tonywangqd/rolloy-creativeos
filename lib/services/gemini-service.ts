@@ -1,132 +1,173 @@
 /**
- * Rolloy Creative OS - Gemini API Service
+ * Rolloy Creative OS - Gemini AI Service
  *
- * Generates Flux-optimized prompts using Google Gemini API
- * Focus: Lighting, environment, human interaction, emotional atmosphere
+ * Handles both text generation (prompts) and image generation using Google Gemini API
+ * Uses gemini-3-pro-preview for text and gemini-3-pro-image-preview for images
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import {
-  ABCDSelection,
-  ProductState,
-  GeminiPromptRequest,
-  GeminiPromptResponse,
-  GeminiAPIError,
-} from '@/lib/types';
 
 // ============================================================================
 // Configuration
 // ============================================================================
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash-exp';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || 'gemini-2.0-flash-exp';
+const IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.0-flash-exp';
 
-if (!GEMINI_API_KEY) {
-  throw new Error('GEMINI_API_KEY is not set in environment variables');
+// Reference images
+const UNFOLDED_IMAGE_URL = process.env.NEXT_PUBLIC_UNFOLDED_IMAGE_URL || '';
+const FOLDED_IMAGE_URL = process.env.NEXT_PUBLIC_FOLDED_IMAGE_URL || '';
+
+// ============================================================================
+// Types
+// ============================================================================
+
+export interface ABCDSelection {
+  A1: string;  // Scene Category
+  A2: string;  // Scene Detail
+  B: string;   // Action
+  C: string;   // Driver/Characters
+  D: string;   // Emotion/Format
 }
 
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+export type ProductState = 'UNFOLDED' | 'FOLDED';
+
+export interface GenerationResult {
+  success: boolean;
+  imageUrls: string[];
+  prompt: string;
+  productState: ProductState;
+  referenceImageUrl: string;
+  error?: string;
+}
+
+export interface PromptResult {
+  prompt: string;
+  productState: ProductState;
+  referenceImageUrl: string;
+}
+
+export interface GeminiPromptRequest {
+  selection: ABCDSelection;
+  productState: ProductState;
+  additionalContext?: string;
+}
+
+export interface GeminiPromptResponse {
+  prompt: string;
+  metadata: {
+    model: string;
+    timestamp: string;
+    tokensUsed?: number;
+  };
+}
+
+// Custom error class
+export class GeminiAPIError extends Error {
+  constructor(message: string, public cause?: unknown) {
+    super(message);
+    this.name = 'GeminiAPIError';
+  }
+}
+
+// ============================================================================
+// State Router - Determines product state based on Action (B)
+// ============================================================================
+
+const UNFOLDED_ACTIONS = ['walk', 'sit', 'turn', 'stand', 'rest', 'using', 'stroll', 'push', 'roll'];
+const FOLDED_ACTIONS = ['lift', 'pack', 'carry', 'trunk', 'car-trunk', 'store', 'transport', 'fold'];
+
+export function determineProductState(action: string): ProductState {
+  const normalizedAction = action.toLowerCase();
+
+  if (UNFOLDED_ACTIONS.some(a => normalizedAction.includes(a))) {
+    return 'UNFOLDED';
+  }
+
+  if (FOLDED_ACTIONS.some(a => normalizedAction.includes(a))) {
+    return 'FOLDED';
+  }
+
+  // Default to UNFOLDED for unknown actions
+  return 'UNFOLDED';
+}
+
+export function getReferenceImageUrl(state: ProductState): string {
+  return state === 'UNFOLDED' ? UNFOLDED_IMAGE_URL : FOLDED_IMAGE_URL;
+}
 
 // ============================================================================
 // System Prompt Template
 // ============================================================================
 
-const SYSTEM_PROMPT = `You are an expert Flux prompt engineer specializing in baby stroller advertising photography.
+const SYSTEM_PROMPT = `You are an expert advertising creative director specializing in DTC mobility products (walkers/rollators for seniors).
 
-**Your Role:**
-Generate highly detailed, photorealistic prompts for Flux image-to-image generation that will transform a product reference image into compelling lifestyle advertising photography.
+Your task is to generate image prompts for AI image generation that will create compelling advertising visuals.
 
-**Critical Rules:**
-1. NEVER describe product geometry, dimensions, or structural details (the base image already contains this)
-2. FOCUS on: lighting, atmosphere, environment details, human emotion, interaction, and mood
-3. Be specific about: time of day, weather, lighting quality (soft/harsh/golden hour), shadows
-4. Describe human subjects: age, ethnicity, clothing style, expressions, body language
-5. Include environmental context: background elements, textures, colors, depth
-6. Emphasize emotional tone matching the D-code emotion
-7. Keep prompts under 200 words
-8. Use cinematic photography terminology
+CRITICAL RULES:
+1. We are using img2img with a reference product image - DO NOT describe the product's mechanical details (wheels, frame, brakes)
+2. Focus ONLY on: lighting, environment, human interaction, mood, atmosphere, camera angle
+3. The product will be preserved from the reference image
+4. Keep prompts under 150 words
+5. Use cinematic, professional photography language
+6. Include specific lighting direction (golden hour, soft diffused, dramatic side-light, etc.)
+7. Describe human subjects: seniors (60-80 years old), their expressions, clothing, body language
+8. The product is a premium walker/rollator, NOT a baby stroller
 
-**Output Format:**
-Return ONLY the prompt text, no explanations or metadata.
-
-**Photography Style:**
-- Professional advertising photography
-- Natural, authentic moments
-- Soft, flattering lighting
-- Depth of field with background blur
-- Color grading: warm, inviting tones
-- Composition: rule of thirds, leading lines`;
+OUTPUT FORMAT:
+Return ONLY the image prompt text, no explanations or additional text.`;
 
 // ============================================================================
 // Prompt Generation Functions
 // ============================================================================
 
-/**
- * Build context string from ABCD selection
- */
-function buildContextString(
-  selection: ABCDSelection,
-  productState: ProductState
-): string {
-  const { A1, A2, B, C, D } = selection;
-
+function buildContextString(selection: ABCDSelection, productState: ProductState): string {
   return `
-Environment: ${A1} setting, specifically ${A2}
-Action: ${B}
-Characters: ${C}
-Emotion/Mood: ${D}
-Product State: ${productState} (${productState === 'FOLDED' ? 'compact, portable' : 'in-use, open'})
+Environment: ${selection.A1} setting, specifically ${selection.A2}
+Action: ${selection.B}
+Characters: ${selection.C}
+Emotion/Mood: ${selection.D}
+Product State: ${productState} (${productState === 'FOLDED' ? 'compact, portable, folded for storage/transport' : 'in-use, fully open and functional'})
 `.trim();
 }
 
-/**
- * Build user prompt for Gemini
- */
-function buildUserPrompt(
-  selection: ABCDSelection,
-  productState: ProductState,
-  additionalContext?: string
-): string {
+function buildUserPrompt(selection: ABCDSelection, productState: ProductState): string {
   const context = buildContextString(selection, productState);
 
-  let prompt = `Generate a Flux image-to-image prompt for the following scenario:
+  return `Generate an advertising image prompt for the following scenario:
 
 ${context}
 
-${additionalContext ? `Additional Context:\n${additionalContext}\n\n` : ''}
+Target Audience: Seniors (60-80 years old) and their adult children who value independence, safety, and modern design.
 
 Remember:
 - Focus on lighting, atmosphere, emotion, and human interaction
-- DO NOT describe the stroller's physical structure
+- DO NOT describe the walker's physical structure
 - Be specific about time of day and lighting conditions
-- Describe the human subjects in detail (age, expression, clothing)
+- Describe the senior subject in detail (age, expression, clothing)
 - Include environmental details and background elements
 - Match the emotional tone: ${selection.D}
 
 Generate the prompt now:`;
-
-  return prompt;
 }
 
 /**
- * Generate prompt using Gemini API
+ * Generate prompt using Gemini API (text model)
  */
-export async function generatePrompt(
-  request: GeminiPromptRequest
-): Promise<GeminiPromptResponse> {
-  try {
-    const { selection, productState, additionalContext } = request;
+export async function generatePrompt(request: GeminiPromptRequest): Promise<GeminiPromptResponse> {
+  if (!GEMINI_API_KEY) {
+    throw new GeminiAPIError('GEMINI_API_KEY is not configured');
+  }
 
-    // Initialize model
+  try {
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({
-      model: GEMINI_MODEL,
+      model: TEXT_MODEL,
       systemInstruction: SYSTEM_PROMPT,
     });
 
-    // Build user prompt
-    const userPrompt = buildUserPrompt(selection, productState, additionalContext);
-
-    // Generate content
+    const userPrompt = buildUserPrompt(request.selection, request.productState);
     const result = await model.generateContent(userPrompt);
     const response = result.response;
     const prompt = response.text().trim();
@@ -138,7 +179,7 @@ export async function generatePrompt(
     return {
       prompt,
       metadata: {
-        model: GEMINI_MODEL,
+        model: TEXT_MODEL,
         timestamp: new Date().toISOString(),
         tokensUsed: response.usageMetadata?.totalTokenCount,
       },
@@ -147,79 +188,263 @@ export async function generatePrompt(
     if (error instanceof GeminiAPIError) {
       throw error;
     }
-
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     throw new GeminiAPIError(`Failed to generate prompt: ${errorMessage}`, error);
   }
 }
 
-/**
- * Generate multiple prompt variations
- * Useful for A/B testing different prompt styles
- */
-export async function generatePromptVariations(
-  request: GeminiPromptRequest,
-  count: number = 3
-): Promise<GeminiPromptResponse[]> {
-  try {
-    const variations = await Promise.all(
-      Array.from({ length: count }, () => generatePrompt(request))
-    );
+// ============================================================================
+// Image Generation using Gemini
+// ============================================================================
 
-    return variations;
+async function fetchImageAsBase64(url: string): Promise<string> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch image: ${response.statusText}`);
+  }
+  const arrayBuffer = await response.arrayBuffer();
+  const base64 = Buffer.from(arrayBuffer).toString('base64');
+  return base64;
+}
+
+/**
+ * Generate a single image using Gemini's image model
+ */
+async function generateSingleImage(
+  genAI: GoogleGenerativeAI,
+  prompt: string,
+  referenceImageBase64: string,
+  mimeType: string,
+  variationIndex: number
+): Promise<string | null> {
+  try {
+    const model = genAI.getGenerativeModel({ model: IMAGE_MODEL });
+
+    const imagePrompt = `Create an advertising photograph based on this reference product image.
+
+${prompt}
+
+IMPORTANT INSTRUCTIONS:
+- Keep the walker/rollator product EXACTLY as shown in the reference image
+- Transform ONLY the background, environment, and add human elements
+- This is variation ${variationIndex + 1}
+- Maintain photorealistic quality
+- Professional advertising photography style`;
+
+    const result = await model.generateContent([
+      {
+        inlineData: {
+          mimeType,
+          data: referenceImageBase64
+        }
+      },
+      { text: imagePrompt }
+    ]);
+
+    const response = await result.response;
+
+    // Check if response contains image data
+    if (response.candidates && response.candidates[0]?.content?.parts) {
+      for (const part of response.candidates[0].content.parts) {
+        if ('inlineData' in part && part.inlineData?.data) {
+          // Return as data URL
+          return `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`;
+        }
+      }
+    }
+
+    // Log if we got text instead of image
+    const text = response.text?.();
+    if (text) {
+      console.log(`Gemini returned text instead of image (${variationIndex + 1}):`, text.substring(0, 200));
+    }
+
+    return null;
   } catch (error) {
-    throw new GeminiAPIError('Failed to generate prompt variations', error);
+    console.error(`Image generation error (${variationIndex + 1}):`, error);
+    return null;
   }
 }
 
 /**
- * Enhance existing prompt with Gemini
- * Takes a basic prompt and makes it more detailed
+ * Generate multiple images using Gemini
  */
-export async function enhancePrompt(
-  basePrompt: string,
-  selection: ABCDSelection
-): Promise<GeminiPromptResponse> {
+export async function generateImages(
+  selection: ABCDSelection,
+  numberOfImages: number = 4
+): Promise<GenerationResult> {
+  if (!GEMINI_API_KEY) {
+    return {
+      success: false,
+      imageUrls: [],
+      prompt: '',
+      productState: 'UNFOLDED',
+      referenceImageUrl: UNFOLDED_IMAGE_URL,
+      error: 'GEMINI_API_KEY is not configured'
+    };
+  }
+
   try {
-    const model = genAI.getGenerativeModel({
-      model: GEMINI_MODEL,
-      systemInstruction: SYSTEM_PROMPT,
+    // Step 1: Determine product state and get reference image
+    const productState = determineProductState(selection.B);
+    const referenceImageUrl = getReferenceImageUrl(productState);
+
+    // Step 2: Generate the prompt
+    const promptResult = await generatePrompt({
+      selection,
+      productState
     });
+    const prompt = promptResult.prompt;
 
-    const enhanceRequest = `
-Enhance this basic prompt for better Flux image generation:
+    // Step 3: Fetch reference image as base64
+    const referenceImageBase64 = await fetchImageAsBase64(referenceImageUrl);
+    const mimeType = referenceImageUrl.endsWith('.png') ? 'image/png' : 'image/jpeg';
 
-Base Prompt: "${basePrompt}"
+    // Step 4: Generate images
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+    const imageUrls: string[] = [];
 
-Requirements:
-- Add specific lighting details (time of day, quality of light)
-- Enhance environmental description
-- Add more detail about human expressions and body language
-- Strengthen the emotional atmosphere to match: ${selection.D}
-- Keep under 200 words
-- DO NOT add product structure details
+    // Generate images in batches to avoid rate limiting
+    const batchSize = 2;
+    const batches = Math.ceil(numberOfImages / batchSize);
 
-Enhanced prompt:`;
+    for (let batch = 0; batch < batches; batch++) {
+      const startIdx = batch * batchSize;
+      const endIdx = Math.min(startIdx + batchSize, numberOfImages);
 
-    const result = await model.generateContent(enhanceRequest);
-    const prompt = result.response.text().trim();
+      const batchPromises = [];
+      for (let i = startIdx; i < endIdx; i++) {
+        batchPromises.push(
+          generateSingleImage(genAI, prompt, referenceImageBase64, mimeType, i)
+        );
+      }
+
+      const batchResults = await Promise.all(batchPromises);
+      imageUrls.push(...batchResults.filter((url): url is string => url !== null));
+
+      // Add delay between batches
+      if (batch < batches - 1) {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      }
+    }
 
     return {
+      success: imageUrls.length > 0,
+      imageUrls,
       prompt,
-      metadata: {
-        model: GEMINI_MODEL,
-        timestamp: new Date().toISOString(),
-        tokensUsed: result.response.usageMetadata?.totalTokenCount,
-      },
+      productState,
+      referenceImageUrl,
+      error: imageUrls.length < numberOfImages
+        ? `Only ${imageUrls.length}/${numberOfImages} images generated successfully`
+        : undefined
     };
+
   } catch (error) {
-    throw new GeminiAPIError('Failed to enhance prompt', error);
+    console.error('Image generation failed:', error);
+    return {
+      success: false,
+      imageUrls: [],
+      prompt: '',
+      productState: 'UNFOLDED',
+      referenceImageUrl: UNFOLDED_IMAGE_URL,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
   }
+}
+
+// ============================================================================
+// Batch Generation with Progress
+// ============================================================================
+
+export interface BatchProgress {
+  total: number;
+  completed: number;
+  failed: number;
+  percentage: number;
+}
+
+export type ProgressCallback = (progress: BatchProgress) => void;
+
+/**
+ * Generate a large batch of images with progress tracking
+ */
+export async function generateImagesBatch(
+  selection: ABCDSelection,
+  numberOfImages: number = 20,
+  onProgress?: ProgressCallback
+): Promise<GenerationResult> {
+  const progress: BatchProgress = {
+    total: numberOfImages,
+    completed: 0,
+    failed: 0,
+    percentage: 0
+  };
+
+  const updateProgress = () => {
+    progress.percentage = Math.round((progress.completed + progress.failed) / progress.total * 100);
+    onProgress?.(progress);
+  };
+
+  // Generate in smaller chunks
+  const chunkSize = 4;
+  const chunks = Math.ceil(numberOfImages / chunkSize);
+  const allImageUrls: string[] = [];
+  let finalPrompt = '';
+  let finalState: ProductState = 'UNFOLDED';
+  let finalRefUrl = UNFOLDED_IMAGE_URL;
+
+  for (let i = 0; i < chunks; i++) {
+    const remaining = numberOfImages - i * chunkSize;
+    const currentChunkSize = Math.min(chunkSize, remaining);
+
+    const result = await generateImages(selection, currentChunkSize);
+
+    if (result.success) {
+      allImageUrls.push(...result.imageUrls);
+      progress.completed += result.imageUrls.length;
+      progress.failed += currentChunkSize - result.imageUrls.length;
+      finalPrompt = result.prompt;
+      finalState = result.productState;
+      finalRefUrl = result.referenceImageUrl;
+    } else {
+      progress.failed += currentChunkSize;
+    }
+
+    updateProgress();
+
+    // Delay between chunks
+    if (i < chunks - 1) {
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+  }
+
+  return {
+    success: allImageUrls.length > 0,
+    imageUrls: allImageUrls,
+    prompt: finalPrompt,
+    productState: finalState,
+    referenceImageUrl: finalRefUrl,
+    error: progress.failed > 0 ? `${progress.failed} images failed to generate` : undefined
+  };
+}
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+export function isGeminiConfigured(): boolean {
+  return Boolean(GEMINI_API_KEY);
+}
+
+export function getConfiguredModels(): { textModel: string; imageModel: string } {
+  return {
+    textModel: TEXT_MODEL,
+    imageModel: IMAGE_MODEL
+  };
 }
 
 /**
  * Validate prompt quality
- * Checks if prompt meets quality criteria
  */
 export function validatePromptQuality(prompt: string): {
   valid: boolean;
@@ -229,144 +454,34 @@ export function validatePromptQuality(prompt: string): {
   const issues: string[] = [];
   let score = 100;
 
-  // Check length
   const wordCount = prompt.split(/\s+/).length;
   if (wordCount < 30) {
-    issues.push('Prompt too short (should be 30-200 words)');
+    issues.push('Prompt too short');
     score -= 20;
   }
   if (wordCount > 200) {
-    issues.push('Prompt too long (should be 30-200 words)');
+    issues.push('Prompt too long');
     score -= 10;
   }
 
-  // Check for product geometry keywords (should NOT contain these)
-  const geometryKeywords = [
-    'dimensions',
-    'size',
-    'wheels',
-    'frame',
-    'handle',
-    'seat dimensions',
-    'folding mechanism',
-  ];
-  const containsGeometry = geometryKeywords.some(keyword =>
-    prompt.toLowerCase().includes(keyword)
-  );
-  if (containsGeometry) {
-    issues.push('Contains product geometry descriptions (should focus on atmosphere)');
+  const geometryKeywords = ['dimensions', 'wheels', 'frame', 'mechanism'];
+  if (geometryKeywords.some(k => prompt.toLowerCase().includes(k))) {
+    issues.push('Contains product geometry');
     score -= 30;
   }
 
-  // Check for lighting keywords (should contain at least one)
-  const lightingKeywords = [
-    'light',
-    'lighting',
-    'shadow',
-    'golden hour',
-    'soft light',
-    'natural light',
-    'sunlight',
-    'dappled',
-    'glow',
-  ];
-  const hasLighting = lightingKeywords.some(keyword =>
-    prompt.toLowerCase().includes(keyword)
-  );
-  if (!hasLighting) {
+  const lightingKeywords = ['light', 'shadow', 'golden', 'soft', 'glow'];
+  if (!lightingKeywords.some(k => prompt.toLowerCase().includes(k))) {
     issues.push('Missing lighting description');
     score -= 20;
   }
 
-  // Check for emotion keywords (should contain at least one)
-  const emotionKeywords = [
-    'joy',
-    'smile',
-    'happy',
-    'calm',
-    'peaceful',
-    'loving',
-    'tender',
-    'fun',
-    'playful',
-    'trust',
-    'comfort',
-    'adventure',
-  ];
-  const hasEmotion = emotionKeywords.some(keyword =>
-    prompt.toLowerCase().includes(keyword)
-  );
-  if (!hasEmotion) {
-    issues.push('Missing emotional tone');
-    score -= 15;
-  }
-
-  return {
-    valid: issues.length === 0,
-    issues,
-    score: Math.max(0, score),
-  };
+  return { valid: issues.length === 0, issues, score: Math.max(0, score) };
 }
 
-// ============================================================================
-// Utility Functions
-// ============================================================================
-
 /**
- * Get estimated token count for a prompt
- * (Rough approximation: 1 token ≈ 4 characters)
+ * Estimate token count
  */
 export function estimateTokenCount(text: string): number {
   return Math.ceil(text.length / 4);
-}
-
-/**
- * Format prompt for display
- * Adds proper line breaks and formatting
- */
-export function formatPromptForDisplay(prompt: string): string {
-  return prompt
-    .split('. ')
-    .map(sentence => sentence.trim())
-    .filter(Boolean)
-    .join('.\n');
-}
-
-/**
- * Extract keywords from prompt
- * Useful for tagging and search
- */
-export function extractKeywords(prompt: string): string[] {
-  const words = prompt.toLowerCase().split(/\W+/);
-  const stopWords = new Set([
-    'the',
-    'a',
-    'an',
-    'and',
-    'or',
-    'but',
-    'in',
-    'on',
-    'at',
-    'to',
-    'for',
-    'of',
-    'with',
-    'is',
-    'are',
-    'was',
-    'were',
-  ]);
-
-  const keywords = words
-    .filter(word => word.length > 3 && !stopWords.has(word))
-    .reduce((acc, word) => {
-      acc[word] = (acc[word] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-
-  return Object.entries(keywords)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10)
-    .map(([word]) => word);
 }
