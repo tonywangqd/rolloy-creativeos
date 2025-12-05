@@ -1,15 +1,21 @@
 "use client";
 
-import { useState } from "react";
-import { Sparkles, Eye, ImageIcon, RefreshCw, Copy, Check } from "lucide-react";
+import { useState, useCallback } from "react";
+import { Sparkles, Eye, ImageIcon, RefreshCw, Copy, Check, Loader2, StopCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { ABCDSelector, type ABCDSelection } from "@/components/creative/abcd-selector";
 import { NamingCard } from "@/components/creative/naming-card";
-import { Gallery } from "@/components/creative/gallery";
 
 type WorkflowStep = "select" | "prompt" | "generate";
+
+interface GeneratedImage {
+  id: string;
+  url: string;
+  selected: boolean;
+  status: "pending" | "generating" | "success" | "failed";
+}
 
 export default function HomePage() {
   // Selection state
@@ -30,12 +36,15 @@ export default function HomePage() {
   const [creativeName, setCreativeName] = useState("");
 
   // Generation state
-  const [images, setImages] = useState<Array<{ id: string; url: string; selected: boolean }>>([]);
+  const [images, setImages] = useState<GeneratedImage[]>([]);
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
   const [isGeneratingImages, setIsGeneratingImages] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [shouldStop, setShouldStop] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+
+  const totalImages = 20;
 
   const isSelectionComplete =
     selection.sceneCategory &&
@@ -89,60 +98,84 @@ export default function HomePage() {
     }
   };
 
-  // Step 2: Generate Images
-  const handleGenerateImages = async () => {
+  // Step 2: Generate Images One by One
+  const handleGenerateImages = useCallback(async () => {
     setIsGeneratingImages(true);
+    setShouldStop(false);
     setError("");
-    setProgress(0);
-    setImages([]);
     setStep("generate");
+    setCurrentImageIndex(0);
 
-    // Simulate progress while waiting
-    const progressInterval = setInterval(() => {
-      setProgress((prev) => Math.min(prev + 2, 90));
-    }, 500);
+    // Initialize all images as pending
+    const initialImages: GeneratedImage[] = Array.from({ length: totalImages }, (_, i) => ({
+      id: `img-${i + 1}`,
+      url: "",
+      selected: false,
+      status: "pending" as const,
+    }));
+    setImages(initialImages);
 
-    try {
-      const response = await fetch("/api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          selection: {
-            A1: selection.sceneCategory,
-            A2: selection.sceneDetail,
-            B: selection.action,
-            C: selection.driver,
-            D: selection.format,
-          },
-          prompt: editedPrompt,
-          numImages: 20,
-        }),
-      });
-
-      clearInterval(progressInterval);
-
-      const data = await response.json();
-
-      if (data.success && data.data.generatedImages) {
-        const generatedImages = data.data.generatedImages.map((url: string, index: number) => ({
-          id: `img-${index + 1}`,
-          url,
-          selected: false,
-        }));
-        setImages(generatedImages);
-        setProgress(100);
-      } else {
-        setError(data.error?.message || "Failed to generate images");
-        setProgress(0);
+    // Generate images one by one
+    for (let i = 0; i < totalImages; i++) {
+      // Check if user requested stop
+      if (shouldStop) {
+        console.log("Generation stopped by user");
+        break;
       }
-    } catch (err) {
-      clearInterval(progressInterval);
-      setError("Network error. Please try again.");
-      setProgress(0);
-      console.error(err);
-    } finally {
-      setIsGeneratingImages(false);
+
+      setCurrentImageIndex(i);
+
+      // Update current image status to generating
+      setImages(prev => prev.map((img, idx) =>
+        idx === i ? { ...img, status: "generating" as const } : img
+      ));
+
+      try {
+        const response = await fetch("/api/generate-single", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt: editedPrompt,
+            referenceImageUrl,
+            imageIndex: i,
+            totalImages,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (data.success && data.data.imageUrl) {
+          // Update with generated image
+          setImages(prev => prev.map((img, idx) =>
+            idx === i ? { ...img, url: data.data.imageUrl, status: "success" as const } : img
+          ));
+        } else {
+          // Mark as failed
+          setImages(prev => prev.map((img, idx) =>
+            idx === i ? { ...img, status: "failed" as const } : img
+          ));
+          console.error(`Image ${i + 1} failed:`, data.error?.message);
+        }
+      } catch (err) {
+        // Mark as failed
+        setImages(prev => prev.map((img, idx) =>
+          idx === i ? { ...img, status: "failed" as const } : img
+        ));
+        console.error(`Image ${i + 1} error:`, err);
+      }
+
+      // Small delay between requests to avoid rate limiting
+      if (i < totalImages - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
     }
+
+    setIsGeneratingImages(false);
+  }, [editedPrompt, referenceImageUrl, shouldStop]);
+
+  // Stop generation
+  const handleStopGeneration = () => {
+    setShouldStop(true);
   };
 
   // Reset to start
@@ -151,8 +184,9 @@ export default function HomePage() {
     setPrompt("");
     setEditedPrompt("");
     setImages([]);
-    setProgress(0);
     setError("");
+    setShouldStop(false);
+    setCurrentImageIndex(0);
   };
 
   // Copy prompt
@@ -162,10 +196,17 @@ export default function HomePage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleSaveSelected = (selectedIds: string[]) => {
-    console.log("Saving selected images:", selectedIds);
-    alert(`Saved ${selectedIds.length} images!`);
+  // Toggle image selection
+  const toggleImageSelection = (id: string) => {
+    setImages(prev => prev.map(img =>
+      img.id === id ? { ...img, selected: !img.selected } : img
+    ));
   };
+
+  // Get stats
+  const successCount = images.filter(img => img.status === "success").length;
+  const failedCount = images.filter(img => img.status === "failed").length;
+  const selectedCount = images.filter(img => img.selected).length;
 
   return (
     <div className="space-y-6">
@@ -277,38 +318,126 @@ export default function HomePage() {
                 {/* Editable Prompt */}
                 <div>
                   <label className="text-sm font-medium mb-2 block">
-                    Edit Prompt (optional)
+                    Edit Prompt (optional) - Modify and confirm, or click Generate directly
                   </label>
                   <Textarea
                     value={editedPrompt}
                     onChange={(e) => setEditedPrompt(e.target.value)}
                     rows={8}
                     className="font-mono text-sm"
+                    placeholder="Edit the prompt here..."
                   />
                 </div>
 
                 {/* Generate Button */}
-                <Button
-                  size="lg"
-                  className="w-full"
-                  onClick={handleGenerateImages}
-                  disabled={isGeneratingImages || !editedPrompt}
-                >
-                  <ImageIcon className="mr-2 h-5 w-5" />
-                  Generate 20 Images
-                </Button>
+                <div className="flex gap-3">
+                  <Button
+                    size="lg"
+                    className="flex-1"
+                    onClick={handleGenerateImages}
+                    disabled={isGeneratingImages || !editedPrompt}
+                  >
+                    <ImageIcon className="mr-2 h-5 w-5" />
+                    Confirm & Generate {totalImages} Images
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           )}
 
-          {/* Gallery Step */}
-          {(step === "generate" || images.length > 0) && (
-            <Gallery
-              images={images}
-              isLoading={isGeneratingImages}
-              progress={progress}
-              onSaveSelected={handleSaveSelected}
-            />
+          {/* Gallery Step - Real-time Generation */}
+          {step === "generate" && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span>
+                    Generated Images
+                    {isGeneratingImages && (
+                      <span className="ml-2 text-sm font-normal text-muted-foreground">
+                        ({currentImageIndex + 1}/{totalImages})
+                      </span>
+                    )}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-muted-foreground">
+                      ✓ {successCount} | ✗ {failedCount} | Selected: {selectedCount}
+                    </span>
+                    {isGeneratingImages && (
+                      <Button variant="destructive" size="sm" onClick={handleStopGeneration}>
+                        <StopCircle className="mr-2 h-4 w-4" />
+                        Stop
+                      </Button>
+                    )}
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-4 gap-3">
+                  {images.map((image, index) => (
+                    <div
+                      key={image.id}
+                      className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all cursor-pointer
+                        ${image.selected ? "border-primary ring-2 ring-primary/50" : "border-border"}
+                        ${image.status === "generating" ? "border-yellow-500" : ""}
+                        ${image.status === "failed" ? "border-red-500 bg-red-500/10" : ""}
+                      `}
+                      onClick={() => image.status === "success" && toggleImageSelection(image.id)}
+                    >
+                      {/* Pending state */}
+                      {image.status === "pending" && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-muted">
+                          <span className="text-xs text-muted-foreground">{index + 1}</span>
+                        </div>
+                      )}
+
+                      {/* Generating state */}
+                      {image.status === "generating" && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-muted">
+                          <Loader2 className="h-6 w-6 animate-spin text-yellow-500" />
+                        </div>
+                      )}
+
+                      {/* Success state */}
+                      {image.status === "success" && image.url && (
+                        <img
+                          src={image.url}
+                          alt={`Generated ${index + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                      )}
+
+                      {/* Failed state */}
+                      {image.status === "failed" && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="text-xs text-red-500">Failed</span>
+                        </div>
+                      )}
+
+                      {/* Selection indicator */}
+                      {image.selected && (
+                        <div className="absolute top-2 right-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
+                          <Check className="h-3 w-3 text-primary-foreground" />
+                        </div>
+                      )}
+
+                      {/* Index badge */}
+                      <div className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
+                        {index + 1}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Save Selected Button */}
+                {selectedCount > 0 && !isGeneratingImages && (
+                  <div className="mt-4 flex justify-end">
+                    <Button>
+                      Save {selectedCount} Selected Images
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           )}
 
           {/* Initial State */}
