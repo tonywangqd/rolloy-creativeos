@@ -6,13 +6,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 
-// Password from environment variable, default for development
-const APP_PASSWORD = process.env.APP_PASSWORD || 'rolloy2025';
+// Password from environment variable (REQUIRED)
+const APP_PASSWORD = process.env.APP_PASSWORD || '';
 const AUTH_COOKIE_NAME = 'rolloy_auth';
 const AUTH_TOKEN = 'authenticated_' + Buffer.from(APP_PASSWORD).toString('base64').slice(0, 16);
 
 export async function POST(request: NextRequest) {
   try {
+    // Check if password is configured
+    if (!APP_PASSWORD) {
+      return NextResponse.json(
+        { success: false, error: 'Password not configured on server' },
+        { status: 500 }
+      );
+    }
+
     const body = await request.json();
     const { password } = body;
 

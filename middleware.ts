@@ -6,7 +6,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const APP_PASSWORD = process.env.APP_PASSWORD || 'rolloy2025';
+const APP_PASSWORD = process.env.APP_PASSWORD || '';
 const AUTH_COOKIE_NAME = 'rolloy_auth';
 const AUTH_TOKEN = 'authenticated_' + Buffer.from(APP_PASSWORD).toString('base64').slice(0, 16);
 
