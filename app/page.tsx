@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { Sparkles, Eye, ImageIcon, RefreshCw, Copy, Check, Loader2, StopCircle, Cloud } from "lucide-react";
+import { useState, useCallback, useEffect } from "react";
+import { Sparkles, Eye, ImageIcon, RefreshCw, Copy, Check, Loader2, StopCircle, Cloud, Play, Pause } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { ABCDSelector, type ABCDSelection } from "@/components/creative/abcd-selector";
 import { NamingCard } from "@/components/creative/naming-card";
+import { SessionList } from "@/components/sessions/session-list";
+import type { SessionSummary, GenerationSession } from "@/lib/types/session";
 
 type WorkflowStep = "select" | "prompt" | "generate";
 
@@ -19,6 +21,11 @@ interface GeneratedImage {
 }
 
 export default function HomePage() {
+  // Session state
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(true);
+
   // Selection state
   const [selection, setSelection] = useState<ABCDSelection>({
     sceneCategory: "",
@@ -42,6 +49,7 @@ export default function HomePage() {
   const [isGeneratingImages, setIsGeneratingImages] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [shouldStop, setShouldStop] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
 
@@ -53,6 +61,148 @@ export default function HomePage() {
     selection.action &&
     selection.driver &&
     selection.format;
+
+  // Load sessions on mount
+  useEffect(() => {
+    loadSessions();
+  }, []);
+
+  const loadSessions = async () => {
+    try {
+      setIsLoadingSessions(true);
+      const response = await fetch("/api/sessions");
+      const data = await response.json();
+      if (data.success) {
+        setSessions(data.data.sessions || []);
+      }
+    } catch (err) {
+      console.error("Failed to load sessions:", err);
+    } finally {
+      setIsLoadingSessions(false);
+    }
+  };
+
+  // Create a new session
+  const createSession = async (): Promise<string | null> => {
+    try {
+      const response = await fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          creative_name: creativeName,
+          abcd_selection: {
+            A1: selection.sceneCategory,
+            A2: selection.sceneDetail,
+            B: selection.action,
+            C: selection.driver,
+            D: selection.format,
+          },
+          prompt: editedPrompt,
+          product_state: productState,
+          reference_image_url: referenceImageUrl,
+          total_images: totalImages,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setCurrentSessionId(data.data.session.id);
+        await loadSessions(); // Refresh list
+        return data.data.session.id;
+      }
+      return null;
+    } catch (err) {
+      console.error("Failed to create session:", err);
+      return null;
+    }
+  };
+
+  // Update session status
+  const updateSessionStatus = async (sessionId: string, status: string) => {
+    try {
+      await fetch(`/api/sessions/${sessionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      await loadSessions(); // Refresh list
+    } catch (err) {
+      console.error("Failed to update session:", err);
+    }
+  };
+
+  // Load a session
+  const handleSessionSelect = async (session: SessionSummary) => {
+    try {
+      const response = await fetch(`/api/sessions/${session.id}`);
+      const data = await response.json();
+
+      if (data.success) {
+        const sessionDetail = data.data;
+
+        // Set current session
+        setCurrentSessionId(session.id);
+
+        // Restore selection
+        setSelection({
+          sceneCategory: sessionDetail.abcd_selection.A1,
+          sceneDetail: sessionDetail.abcd_selection.A2,
+          action: sessionDetail.abcd_selection.B,
+          driver: sessionDetail.abcd_selection.C,
+          format: sessionDetail.abcd_selection.D,
+        });
+
+        // Restore prompt
+        setPrompt(sessionDetail.prompt);
+        setEditedPrompt(sessionDetail.prompt);
+        setProductState(sessionDetail.product_state);
+        setReferenceImageUrl(sessionDetail.reference_image_url);
+        setCreativeName(sessionDetail.creative_name);
+
+        // Restore images
+        const restoredImages: GeneratedImage[] = sessionDetail.images.map((img: any) => ({
+          id: img.id,
+          url: img.storage_url || "",
+          storageUrl: img.storage_url || null,
+          selected: false,
+          status: img.status === "success" ? "success" : img.status === "failed" ? "failed" : "pending",
+        }));
+        setImages(restoredImages);
+
+        // Set step based on session status
+        if (sessionDetail.status === "draft") {
+          setStep("prompt");
+        } else {
+          setStep("generate");
+        }
+
+        // Check if paused
+        setIsPaused(sessionDetail.status === "paused");
+      }
+    } catch (err) {
+      console.error("Failed to load session:", err);
+    }
+  };
+
+  // Start a new session
+  const handleNewSession = () => {
+    setCurrentSessionId(null);
+    setSelection({
+      sceneCategory: "",
+      sceneDetail: "",
+      action: "",
+      driver: "",
+      format: "",
+    });
+    setStep("select");
+    setPrompt("");
+    setEditedPrompt("");
+    setImages([]);
+    setError("");
+    setShouldStop(false);
+    setIsPaused(false);
+    setCurrentImageIndex(0);
+  };
 
   // Step 1: Generate Prompt
   const handleGeneratePrompt = async () => {
@@ -100,28 +250,54 @@ export default function HomePage() {
   };
 
   // Step 2: Generate Images One by One
-  const handleGenerateImages = useCallback(async () => {
+  const handleGenerateImages = useCallback(async (startIndex: number = 0, sessionId?: string) => {
     setIsGeneratingImages(true);
     setShouldStop(false);
+    setIsPaused(false);
     setError("");
     setStep("generate");
-    setCurrentImageIndex(0);
 
-    // Initialize all images as pending
-    const initialImages: GeneratedImage[] = Array.from({ length: totalImages }, (_, i) => ({
-      id: `img-${i + 1}`,
-      url: "",
-      storageUrl: null,
-      selected: false,
-      status: "pending" as const,
-    }));
-    setImages(initialImages);
+    let activeSessionId = sessionId || currentSessionId;
+
+    // Create session if not exists
+    if (!activeSessionId) {
+      activeSessionId = await createSession();
+      if (!activeSessionId) {
+        setError("Failed to create session");
+        setIsGeneratingImages(false);
+        return;
+      }
+    } else {
+      // Update session status to in_progress
+      await updateSessionStatus(activeSessionId, "in_progress");
+    }
+
+    // Initialize images if starting fresh
+    if (startIndex === 0) {
+      const initialImages: GeneratedImage[] = Array.from({ length: totalImages }, (_, i) => ({
+        id: `img-${i + 1}`,
+        url: "",
+        storageUrl: null,
+        selected: false,
+        status: "pending" as const,
+      }));
+      setImages(initialImages);
+    }
+
+    setCurrentImageIndex(startIndex);
 
     // Generate images one by one
-    for (let i = 0; i < totalImages; i++) {
-      // Check if user requested stop
+    for (let i = startIndex; i < totalImages; i++) {
+      // Check if user requested stop or pause
       if (shouldStop) {
         console.log("Generation stopped by user");
+        await updateSessionStatus(activeSessionId, "cancelled");
+        break;
+      }
+
+      if (isPaused) {
+        console.log("Generation paused by user");
+        await updateSessionStatus(activeSessionId, "paused");
         break;
       }
 
@@ -141,14 +317,14 @@ export default function HomePage() {
             referenceImageUrl,
             imageIndex: i,
             totalImages,
-            creativeName, // Pass creativeName for auto-save
+            creativeName,
+            sessionId: activeSessionId,
           }),
         });
 
         const data = await response.json();
 
         if (data.success && data.data.imageUrl) {
-          // Update with generated image (includes storageUrl from auto-save)
           setImages(prev => prev.map((img, idx) =>
             idx === i ? {
               ...img,
@@ -161,43 +337,49 @@ export default function HomePage() {
             console.log(`Image ${i + 1} saved to: ${data.data.storageUrl}`);
           }
         } else {
-          // Mark as failed
           setImages(prev => prev.map((img, idx) =>
             idx === i ? { ...img, status: "failed" as const } : img
           ));
           console.error(`Image ${i + 1} failed:`, data.error?.message);
         }
       } catch (err) {
-        // Mark as failed
         setImages(prev => prev.map((img, idx) =>
           idx === i ? { ...img, status: "failed" as const } : img
         ));
         console.error(`Image ${i + 1} error:`, err);
       }
 
-      // Small delay between requests to avoid rate limiting
-      if (i < totalImages - 1) {
+      // Small delay between requests
+      if (i < totalImages - 1 && !shouldStop && !isPaused) {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 
+    // Mark session as completed if all done
+    if (!shouldStop && !isPaused) {
+      await updateSessionStatus(activeSessionId, "completed");
+    }
+
     setIsGeneratingImages(false);
-  }, [editedPrompt, referenceImageUrl, shouldStop, creativeName]);
+    await loadSessions(); // Refresh session list
+  }, [editedPrompt, referenceImageUrl, shouldStop, isPaused, creativeName, currentSessionId]);
+
+  // Pause generation
+  const handlePauseGeneration = () => {
+    setIsPaused(true);
+  };
+
+  // Resume generation
+  const handleResumeGeneration = () => {
+    const nextIndex = images.findIndex(img => img.status === "pending");
+    if (nextIndex !== -1) {
+      handleGenerateImages(nextIndex, currentSessionId || undefined);
+    }
+  };
 
   // Stop generation
   const handleStopGeneration = () => {
     setShouldStop(true);
-  };
-
-  // Reset to start
-  const handleReset = () => {
-    setStep("select");
-    setPrompt("");
-    setEditedPrompt("");
-    setImages([]);
-    setError("");
-    setShouldStop(false);
-    setCurrentImageIndex(0);
   };
 
   // Copy prompt
@@ -258,9 +440,22 @@ export default function HomePage() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: ABCD Selection */}
-        <div className="lg:col-span-1 space-y-6">
-          <ABCDSelector onSelectionChange={setSelection} />
+        {/* Left Column: Sessions + ABCD Selection */}
+        <div className="lg:col-span-1 space-y-4">
+          {/* Session List */}
+          <SessionList
+            sessions={sessions}
+            currentSessionId={currentSessionId}
+            onSessionSelect={handleSessionSelect}
+            onNewSession={handleNewSession}
+          />
+
+          {/* ABCD Selector */}
+          <ABCDSelector
+            onSelectionChange={setSelection}
+            initialSelection={selection}
+            disabled={!!currentSessionId && step !== "select"}
+          />
           <NamingCard selection={selection} />
 
           {/* Action Buttons */}
@@ -277,12 +472,12 @@ export default function HomePage() {
               </Button>
             )}
 
-            {step !== "select" && (
+            {step !== "select" && !currentSessionId && (
               <Button
                 variant="outline"
                 size="lg"
                 className="w-full"
-                onClick={handleReset}
+                onClick={handleNewSession}
               >
                 <RefreshCw className="mr-2 h-5 w-5" />
                 Start Over
@@ -346,7 +541,7 @@ export default function HomePage() {
                   <Button
                     size="lg"
                     className="flex-1"
-                    onClick={handleGenerateImages}
+                    onClick={() => handleGenerateImages(0)}
                     disabled={isGeneratingImages || !editedPrompt}
                   >
                     <ImageIcon className="mr-2 h-5 w-5" />
@@ -374,12 +569,23 @@ export default function HomePage() {
                     <span className="text-sm text-muted-foreground">
                       ✓ {successCount} | ✗ {failedCount} | 💾 {savedCount} | Selected: {selectedCount}
                     </span>
-                    {isGeneratingImages && (
-                      <Button variant="destructive" size="sm" onClick={handleStopGeneration}>
-                        <StopCircle className="mr-2 h-4 w-4" />
-                        Stop
+                    {isGeneratingImages ? (
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={handlePauseGeneration}>
+                          <Pause className="mr-2 h-4 w-4" />
+                          Pause
+                        </Button>
+                        <Button variant="destructive" size="sm" onClick={handleStopGeneration}>
+                          <StopCircle className="mr-2 h-4 w-4" />
+                          Stop
+                        </Button>
+                      </div>
+                    ) : isPaused && successCount < totalImages ? (
+                      <Button size="sm" onClick={handleResumeGeneration}>
+                        <Play className="mr-2 h-4 w-4" />
+                        Resume
                       </Button>
-                    )}
+                    ) : null}
                   </div>
                 </CardTitle>
               </CardHeader>

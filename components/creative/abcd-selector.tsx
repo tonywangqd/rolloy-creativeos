@@ -15,14 +15,27 @@ export interface ABCDSelection {
 
 interface ABCDSelectorProps {
   onSelectionChange: (selection: ABCDSelection) => void;
+  initialSelection?: ABCDSelection;
+  disabled?: boolean;
 }
 
-export function ABCDSelector({ onSelectionChange }: ABCDSelectorProps) {
-  const [sceneCategory, setSceneCategory] = useState<string>("");
-  const [sceneDetail, setSceneDetail] = useState<string>("");
-  const [action, setAction] = useState<string>("");
-  const [driver, setDriver] = useState<string>("");
-  const [format, setFormat] = useState<string>("");
+export function ABCDSelector({ onSelectionChange, initialSelection, disabled }: ABCDSelectorProps) {
+  const [sceneCategory, setSceneCategory] = useState<string>(initialSelection?.sceneCategory || "");
+  const [sceneDetail, setSceneDetail] = useState<string>(initialSelection?.sceneDetail || "");
+  const [action, setAction] = useState<string>(initialSelection?.action || "");
+  const [driver, setDriver] = useState<string>(initialSelection?.driver || "");
+  const [format, setFormat] = useState<string>(initialSelection?.format || "");
+
+  // Update state when initialSelection changes (for loading sessions)
+  useEffect(() => {
+    if (initialSelection) {
+      setSceneCategory(initialSelection.sceneCategory);
+      setSceneDetail(initialSelection.sceneDetail);
+      setAction(initialSelection.action);
+      setDriver(initialSelection.driver);
+      setFormat(initialSelection.format);
+    }
+  }, [initialSelection]);
 
   const availableSceneDetails = sceneCategory
     ? SCENES[sceneCategory as keyof typeof SCENES] || []
@@ -59,6 +72,7 @@ export function ABCDSelector({ onSelectionChange }: ABCDSelectorProps) {
             label="Scene Category"
             value={sceneCategory}
             onChange={(e) => setSceneCategory(e.target.value)}
+            disabled={disabled}
           >
             <option value="">Select Category...</option>
             {Object.keys(SCENES).map((category) => (
@@ -72,7 +86,7 @@ export function ABCDSelector({ onSelectionChange }: ABCDSelectorProps) {
             label="Scene Detail"
             value={sceneDetail}
             onChange={(e) => setSceneDetail(e.target.value)}
-            disabled={!sceneCategory}
+            disabled={disabled || !sceneCategory}
           >
             <option value="">Select Detail...</option>
             {availableSceneDetails.map((detail) => (
@@ -92,6 +106,7 @@ export function ABCDSelector({ onSelectionChange }: ABCDSelectorProps) {
             label="Action"
             value={action}
             onChange={(e) => setAction(e.target.value)}
+            disabled={disabled}
           >
             <option value="">Select Action...</option>
             {ACTIONS.map((act) => (
@@ -111,6 +126,7 @@ export function ABCDSelector({ onSelectionChange }: ABCDSelectorProps) {
             label="Emotional Driver"
             value={driver}
             onChange={(e) => setDriver(e.target.value)}
+            disabled={disabled}
           >
             <option value="">Select Driver...</option>
             {DRIVERS.map((drv) => (
@@ -130,6 +146,7 @@ export function ABCDSelector({ onSelectionChange }: ABCDSelectorProps) {
             label="Creative Format"
             value={format}
             onChange={(e) => setFormat(e.target.value)}
+            disabled={disabled}
           >
             <option value="">Select Format...</option>
             {FORMATS.map((fmt) => (

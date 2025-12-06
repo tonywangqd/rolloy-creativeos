@@ -10,7 +10,8 @@
       "Task",
       "NotebookEdit",
       "Bash(cat:*)",
-      "Bash(git check-ignore:*)"
+      "Bash(git check-ignore:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "defaultMode": "bypassPermissions"
