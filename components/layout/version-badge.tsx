@@ -7,7 +7,7 @@
 
 // Version info - update this when releasing new versions
 const VERSION = "3.1.0";
-const BUILD_TIMESTAMP = "2025-12-06T20:30:00+08:00"; // Beijing time
+const BUILD_TIMESTAMP = "2025-12-06T13:10:00+08:00"; // Beijing time
 
 export function VersionBadge() {
   // Format the timestamp for display
