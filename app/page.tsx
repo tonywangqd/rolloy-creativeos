@@ -293,20 +293,9 @@ export default function HomePage() {
     }));
     setImages(prev => [...prev, ...newPendingImages]);
 
-    // Generate images one by one with delay
-    for (let i = 0; i < BATCH_SIZE; i++) {
-      const globalIndex = startIndex + i;
-
-      // Check if user requested stop
-      if (shouldStopRef.current) {
-        console.log("Generation stopped by user");
-        await updateSessionStatus(activeSessionId, "paused");
-        break;
-      }
-
-      setCurrentImageIndex(globalIndex);
-
-      // Update current image status to generating
+    // Generate single image (returns a promise)
+    const generateSingleImage = async (globalIndex: number) => {
+      // Update status to generating
       setImages(prev => prev.map((img, idx) =>
         idx === globalIndex ? { ...img, status: "generating" as const } : img
       ));
@@ -350,12 +339,30 @@ export default function HomePage() {
         ));
         console.error(`Image ${globalIndex + 1} error:`, err);
       }
+    };
 
-      // Wait 1 second before next API call (except for the last one)
-      if (i < BATCH_SIZE - 1 && !shouldStopRef.current) {
+    // Launch all requests with staggered start (1 second apart)
+    const promises: Promise<void>[] = [];
+    for (let i = 0; i < BATCH_SIZE; i++) {
+      if (shouldStopRef.current) {
+        console.log("Generation stopped by user");
+        break;
+      }
+
+      const globalIndex = startIndex + i;
+      setCurrentImageIndex(globalIndex);
+
+      // Start the request immediately (don't await)
+      promises.push(generateSingleImage(globalIndex));
+
+      // Wait 1 second before starting the next request (except for the last one)
+      if (i < BATCH_SIZE - 1) {
         await new Promise(resolve => setTimeout(resolve, API_DELAY_MS));
       }
     }
+
+    // Wait for all requests to complete
+    await Promise.all(promises);
 
     // Mark batch as completed
     if (!shouldStopRef.current) {

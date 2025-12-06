@@ -1,8 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { formatDistanceToNow } from "date-fns";
-import { zhCN } from "date-fns/locale";
+import { format } from "date-fns";
 import { Clock, Image } from "lucide-react";
 import { SessionStatusBadge } from "./session-status-badge";
 import { cn } from "@/lib/utils";
@@ -17,13 +16,12 @@ interface SessionItemProps {
 export function SessionItem({ session, isActive, onClick }: SessionItemProps) {
   const progress = session.progress_percentage || 0;
 
-  // Memoize date formatting to avoid blocking UI
-  const timeAgo = useMemo(() => {
+  // Format date as Beijing time (absolute)
+  const formattedTime = useMemo(() => {
     try {
-      return formatDistanceToNow(new Date(session.updated_at), {
-        addSuffix: true,
-        locale: zhCN
-      });
+      const date = new Date(session.updated_at);
+      // Format: 2025-12-06 13:45
+      return format(date, "yyyy-MM-dd HH:mm");
     } catch {
       return "";
     }
@@ -53,7 +51,7 @@ export function SessionItem({ session, isActive, onClick }: SessionItemProps) {
       {/* Time */}
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2">
         <Clock className="h-3 w-3" />
-        <span>{timeAgo}</span>
+        <span>{formattedTime}</span>
       </div>
 
       {/* Progress */}
