@@ -6,6 +6,9 @@
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { promises as fs } from 'fs';
+import path from 'path';
+import { DEFAULT_SYSTEM_PROMPT } from '@/lib/config/prompts';
 
 // ============================================================================
 // Configuration
@@ -18,6 +21,21 @@ const IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.0-flash-exp';
 // Reference images
 const UNFOLDED_IMAGE_URL = process.env.NEXT_PUBLIC_UNFOLDED_IMAGE_URL || '';
 const FOLDED_IMAGE_URL = process.env.NEXT_PUBLIC_FOLDED_IMAGE_URL || '';
+
+// Config file path for system prompt
+const CONFIG_FILE = path.join(process.cwd(), 'config', 'system-prompt.json');
+
+// Get the current system prompt (from config file or default)
+async function getSystemPrompt(): Promise<string> {
+  try {
+    const data = await fs.readFile(CONFIG_FILE, 'utf-8');
+    const config = JSON.parse(data);
+    return config.systemPrompt || DEFAULT_SYSTEM_PROMPT;
+  } catch {
+    // File doesn't exist or error reading, use default
+    return DEFAULT_SYSTEM_PROMPT;
+  }
+}
 
 // ============================================================================
 // Types
@@ -101,22 +119,8 @@ export function getReferenceImageUrl(state: ProductState): string {
 // System Prompt Template
 // ============================================================================
 
-const SYSTEM_PROMPT = `You are an expert advertising creative director specializing in DTC mobility products (walkers/rollators for seniors).
-
-Your task is to generate image prompts for AI image generation that will create compelling advertising visuals.
-
-CRITICAL RULES:
-1. We are using img2img with a reference product image - DO NOT describe the product's mechanical details (wheels, frame, brakes)
-2. Focus ONLY on: lighting, environment, human interaction, mood, atmosphere, camera angle
-3. The product will be preserved from the reference image
-4. Keep prompts under 150 words
-5. Use cinematic, professional photography language
-6. Include specific lighting direction (golden hour, soft diffused, dramatic side-light, etc.)
-7. Describe human subjects: seniors (60-80 years old), their expressions, clothing, body language
-8. The product is a premium walker/rollator, NOT a baby stroller
-
-OUTPUT FORMAT:
-Return ONLY the image prompt text, no explanations or additional text.`;
+// Note: SYSTEM_PROMPT is now loaded dynamically from config file
+// See getSystemPrompt() function above
 
 // ============================================================================
 // Prompt Generation Functions
@@ -161,10 +165,13 @@ export async function generatePrompt(request: GeminiPromptRequest): Promise<Gemi
   }
 
   try {
+    // Load system prompt from config (or use default)
+    const systemPrompt = await getSystemPrompt();
+
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({
       model: TEXT_MODEL,
-      systemInstruction: SYSTEM_PROMPT,
+      systemInstruction: systemPrompt,
     });
 
     const userPrompt = buildUserPrompt(request.selection, request.productState);
