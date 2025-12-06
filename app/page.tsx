@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Sparkles, Eye, ImageIcon, RefreshCw, Copy, Check, Loader2, StopCircle, Cloud, Play, Pause, Star, Plus, Download, ZoomIn } from "lucide-react";
+import { Sparkles, Eye, ImageIcon, RefreshCw, Copy, Check, Loader2, StopCircle, Cloud, Play, Pause, Star, Plus, Download, ZoomIn, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -423,6 +423,11 @@ export default function HomePage() {
     }
   };
 
+  // Delete image
+  const handleDeleteImage = (id: string) => {
+    setImages(prev => prev.filter(img => img.id !== id));
+  };
+
   // Get stats
   const successCount = images.filter(img => img.status === "success").length;
   const failedCount = images.filter(img => img.status === "failed").length;
@@ -630,7 +635,29 @@ export default function HomePage() {
                         Stop
                       </Button>
                     ) : (
-                      <div className="flex gap-2">
+                      <div className="flex items-center gap-2">
+                        {/* Aspect Ratio selector */}
+                        <select
+                          value={aspectRatio}
+                          onChange={(e) => setAspectRatio(e.target.value)}
+                          className="h-8 px-2 rounded-md border border-input bg-background text-xs"
+                          title="Aspect Ratio"
+                        >
+                          {ASPECT_RATIOS.map((ratio) => (
+                            <option key={ratio} value={ratio}>{ratio}</option>
+                          ))}
+                        </select>
+                        {/* Resolution selector */}
+                        <select
+                          value={resolution}
+                          onChange={(e) => setResolution(e.target.value)}
+                          className="h-8 px-2 rounded-md border border-input bg-background text-xs"
+                          title="Resolution"
+                        >
+                          {RESOLUTIONS.map((res) => (
+                            <option key={res} value={res}>{res}</option>
+                          ))}
+                        </select>
                         <Button size="sm" onClick={handleGenerateBatch}>
                           <Plus className="mr-2 h-4 w-4" />
                           Generate {BATCH_SIZE} More
@@ -681,17 +708,31 @@ export default function HomePage() {
                             className="w-full h-full object-cover"
                             onClick={() => toggleImageSelection(image.id)}
                           />
-                          {/* Zoom button for lightbox */}
-                          <button
-                            className="absolute top-2 right-2 w-7 h-7 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openLightbox(successfulImages.findIndex(img => img.id === image.id));
-                            }}
-                            title="放大预览"
-                          >
-                            <ZoomIn className="h-4 w-4 text-white" />
-                          </button>
+                          {/* Action buttons on hover */}
+                          <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                            {/* Zoom button */}
+                            <button
+                              className="w-7 h-7 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openLightbox(successfulImages.findIndex(img => img.id === image.id));
+                              }}
+                              title="放大预览"
+                            >
+                              <ZoomIn className="h-4 w-4 text-white" />
+                            </button>
+                            {/* Delete button */}
+                            <button
+                              className="w-7 h-7 bg-red-500/60 hover:bg-red-500/80 rounded-full flex items-center justify-center"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteImage(image.id);
+                              }}
+                              title="删除图片"
+                            >
+                              <Trash2 className="h-4 w-4 text-white" />
+                            </button>
+                          </div>
                         </>
                       )}
 
