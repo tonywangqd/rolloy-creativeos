@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { Clock, Image } from "lucide-react";
@@ -15,6 +16,18 @@ interface SessionItemProps {
 
 export function SessionItem({ session, isActive, onClick }: SessionItemProps) {
   const progress = session.progress_percentage || 0;
+
+  // Memoize date formatting to avoid blocking UI
+  const timeAgo = useMemo(() => {
+    try {
+      return formatDistanceToNow(new Date(session.updated_at), {
+        addSuffix: true,
+        locale: zhCN
+      });
+    } catch {
+      return "";
+    }
+  }, [session.updated_at]);
 
   return (
     <button
@@ -40,12 +53,7 @@ export function SessionItem({ session, isActive, onClick }: SessionItemProps) {
       {/* Time */}
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2">
         <Clock className="h-3 w-3" />
-        <span>
-          {formatDistanceToNow(new Date(session.updated_at), {
-            addSuffix: true,
-            locale: zhCN
-          })}
-        </span>
+        <span>{timeAgo}</span>
       </div>
 
       {/* Progress */}

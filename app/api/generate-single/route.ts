@@ -32,6 +32,7 @@ interface GenerateSingleRequest {
   imageIndex: number;
   totalImages: number;
   creativeName: string; // For storage path
+  sessionId?: string; // For updating database record
 }
 
 interface APIResponse<T = unknown> {
@@ -117,13 +118,57 @@ async function uploadToStorage(
 }
 
 // ============================================================================
+// Helper: Update database record with storage URL
+// ============================================================================
+
+async function updateImageRecord(
+  sessionId: string,
+  imageIndex: number,
+  storageUrl: string,
+  storagePath: string
+): Promise<boolean> {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    return false;
+  }
+
+  try {
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    // Update the image record by session_id and image_index
+    const { error } = await supabase
+      .from('generated_images_v2')
+      .update({
+        status: 'success',
+        storage_url: storageUrl,
+        storage_path: storagePath,
+        generated_at: new Date().toISOString(),
+      })
+      .eq('session_id', sessionId)
+      .eq('image_index', imageIndex + 1); // image_index is 1-based in DB
+
+    if (error) {
+      console.error('Failed to update image record:', error.message);
+      return false;
+    }
+
+    console.log(`Updated DB record for session ${sessionId}, image ${imageIndex + 1}`);
+    return true;
+  } catch (error) {
+    console.error('Failed to update image record:', error);
+    return false;
+  }
+}
+
+// ============================================================================
 // POST Handler
 // ============================================================================
 
 export async function POST(request: NextRequest) {
   try {
     const body: GenerateSingleRequest = await request.json();
-    const { prompt, referenceImageUrl, imageIndex, totalImages, creativeName } = body;
+    const { prompt, referenceImageUrl, imageIndex, totalImages, creativeName, sessionId } = body;
 
     // Validate request
     if (!prompt || !referenceImageUrl) {
@@ -216,6 +261,16 @@ IMPORTANT INSTRUCTIONS:
             creativeName,
             imageIndex
           );
+
+          // Update database record if sessionId provided
+          if (sessionId && storageResult) {
+            await updateImageRecord(
+              sessionId,
+              imageIndex,
+              storageResult.publicUrl,
+              storageResult.storagePath
+            );
+          }
 
           return NextResponse.json<APIResponse>(
             {
