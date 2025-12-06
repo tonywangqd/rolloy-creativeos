@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Sparkles, Eye, ImageIcon, RefreshCw, Copy, Check, Loader2, StopCircle, Cloud, Play, Pause, Star, Plus, Download } from "lucide-react";
+import { Sparkles, Eye, ImageIcon, RefreshCw, Copy, Check, Loader2, StopCircle, Cloud, Play, Pause, Star, Plus, Download, ZoomIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -634,20 +634,19 @@ export default function HomePage() {
                             src={image.url}
                             alt={`Generated ${index + 1}`}
                             className="w-full h-full object-cover"
-                            onClick={() => openLightbox(successfulImages.findIndex(img => img.id === image.id))}
+                            onClick={() => toggleImageSelection(image.id)}
                           />
-                          {/* Hover overlay for selection */}
-                          <div
-                            className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100"
+                          {/* Zoom button for lightbox */}
+                          <button
+                            className="absolute top-2 right-2 w-7 h-7 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
                             onClick={(e) => {
                               e.stopPropagation();
-                              toggleImageSelection(image.id);
+                              openLightbox(successfulImages.findIndex(img => img.id === image.id));
                             }}
+                            title="放大预览"
                           >
-                            <div className="text-white text-xs font-medium">
-                              {image.selected ? "Deselect" : "Select"}
-                            </div>
-                          </div>
+                            <ZoomIn className="h-4 w-4 text-white" />
+                          </button>
                         </>
                       )}
 
@@ -660,7 +659,7 @@ export default function HomePage() {
 
                       {/* Selection indicator */}
                       {image.selected && (
-                        <div className="absolute top-2 right-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
+                        <div className="absolute top-2 left-10 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
                           <Check className="h-3 w-3 text-primary-foreground" />
                         </div>
                       )}

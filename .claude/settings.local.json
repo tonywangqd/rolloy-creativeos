@@ -11,7 +11,8 @@
       "NotebookEdit",
       "Bash(cat:*)",
       "Bash(git check-ignore:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(TZ=Asia/Shanghai date:*)"
     ],
     "deny": [],
     "defaultMode": "bypassPermissions"
