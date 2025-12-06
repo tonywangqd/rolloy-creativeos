@@ -191,8 +191,8 @@ UNION ALL
 SELECT 'format', id, code, name_zh, ai_visual_prompt, sort_order
 FROM d_format WHERE is_active = true;
 
--- Index on view for faster querying
-CREATE INDEX idx_v_abcd_dimension_code ON v_abcd_full_context(dimension, code);
+-- Note: Cannot create index on view directly in PostgreSQL
+-- The underlying tables already have indexes on code columns
 
 -- ============================================================================
 -- 5. RLS (Row Level Security) - Current: Public Access
