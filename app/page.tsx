@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useTransition, useMemo, memo } from "react";
 import { Sparkles, Eye, ImageIcon, RefreshCw, Copy, Check, Loader2, StopCircle, Cloud, Play, Pause, Star, Plus, Download, ZoomIn, Trash2, ChevronDown, ChevronUp, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -71,6 +71,14 @@ export default function HomePage() {
 
   // Prompt panel state (for generate step)
   const [isPromptPanelOpen, setIsPromptPanelOpen] = useState(true);
+  const [, startTransition] = useTransition();
+
+  // Optimized toggle handler
+  const togglePromptPanel = useCallback(() => {
+    startTransition(() => {
+      setIsPromptPanelOpen(prev => !prev);
+    });
+  }, []);
 
   // Batch size - generate 4 images at a time
   const BATCH_SIZE = 4;
@@ -376,40 +384,44 @@ export default function HomePage() {
     await loadSessions();
   }, [editedPrompt, referenceImageUrl, creativeName, currentSessionId, images.length, aspectRatio, resolution]);
 
-  // Stop generation
-  const handleStopGeneration = () => {
+  // Stop generation - memoized
+  const handleStopGeneration = useCallback(() => {
     shouldStopRef.current = true;
-  };
+  }, []);
 
-  // Copy prompt
-  const handleCopyPrompt = () => {
+  // Copy prompt - memoized
+  const handleCopyPrompt = useCallback(() => {
     navigator.clipboard.writeText(editedPrompt);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  };
+  }, [editedPrompt]);
 
-  // Toggle image selection
-  const toggleImageSelection = (id: string) => {
-    setImages(prev => prev.map(img =>
-      img.id === id ? { ...img, selected: !img.selected } : img
-    ));
-  };
+  // Toggle image selection - memoized
+  const toggleImageSelection = useCallback((id: string) => {
+    startTransition(() => {
+      setImages(prev => prev.map(img =>
+        img.id === id ? { ...img, selected: !img.selected } : img
+      ));
+    });
+  }, []);
 
-  // Update image rating
-  const handleRatingChange = (id: string, rating: number) => {
-    setImages(prev => prev.map(img =>
-      img.id === id ? { ...img, rating } : img
-    ));
-  };
+  // Update image rating - memoized
+  const handleRatingChange = useCallback((id: string, rating: number) => {
+    startTransition(() => {
+      setImages(prev => prev.map(img =>
+        img.id === id ? { ...img, rating } : img
+      ));
+    });
+  }, []);
 
-  // Open lightbox
-  const openLightbox = (index: number) => {
+  // Open lightbox - memoized
+  const openLightbox = useCallback((index: number) => {
     setLightboxIndex(index);
     setLightboxOpen(true);
-  };
+  }, []);
 
-  // Download selected images
-  const handleDownloadSelected = async () => {
+  // Download selected images - memoized
+  const handleDownloadSelected = useCallback(async () => {
     const selectedImages = images.filter(img => img.selected && img.url);
     for (let i = 0; i < selectedImages.length; i++) {
       const img = selectedImages[i];
@@ -419,28 +431,34 @@ export default function HomePage() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      // Small delay between downloads
       if (i < selectedImages.length - 1) {
         await new Promise(resolve => setTimeout(resolve, 300));
       }
     }
-  };
+  }, [images]);
 
-  // Delete image
-  const handleDeleteImage = (id: string) => {
-    setImages(prev => prev.filter(img => img.id !== id));
-  };
+  // Delete image - memoized
+  const handleDeleteImage = useCallback((id: string) => {
+    startTransition(() => {
+      setImages(prev => prev.filter(img => img.id !== id));
+    });
+  }, []);
 
-  // Get stats
-  const successCount = images.filter(img => img.status === "success").length;
-  const failedCount = images.filter(img => img.status === "failed").length;
-  const selectedCount = images.filter(img => img.selected).length;
-  const savedCount = images.filter(img => img.storageUrl).length;
+  // Get stats - memoized to avoid recalculation on every render
+  const { successCount, failedCount, selectedCount, savedCount } = useMemo(() => ({
+    successCount: images.filter(img => img.status === "success").length,
+    failedCount: images.filter(img => img.status === "failed").length,
+    selectedCount: images.filter(img => img.selected).length,
+    savedCount: images.filter(img => img.storageUrl).length,
+  }), [images]);
 
-  // Get successful images for lightbox
-  const successfulImages = images
-    .map((img, index) => ({ ...img, originalIndex: index }))
-    .filter(img => img.status === "success" && img.url);
+  // Get successful images for lightbox - memoized
+  const successfulImages = useMemo(() =>
+    images
+      .map((img, index) => ({ ...img, originalIndex: index }))
+      .filter(img => img.status === "success" && img.url),
+    [images]
+  );
 
   return (
     <div className="space-y-6">
@@ -622,15 +640,15 @@ export default function HomePage() {
               <Card>
                 <CardHeader
                   className="cursor-pointer select-none"
-                  onClick={() => setIsPromptPanelOpen(!isPromptPanelOpen)}
+                  onClick={togglePromptPanel}
                 >
                   <CardTitle className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Pencil className="h-4 w-4" />
-                      <span>Prompt</span>
-                      {!isPromptPanelOpen && (
-                        <span className="text-sm font-normal text-muted-foreground truncate max-w-[300px]">
-                          - {editedPrompt.slice(0, 50)}...
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <Pencil className="h-4 w-4 flex-shrink-0" />
+                      <span className="flex-shrink-0">Prompt</span>
+                      {!isPromptPanelOpen && editedPrompt && (
+                        <span className="text-sm font-normal text-muted-foreground truncate">
+                          - {editedPrompt.slice(0, 40)}...
                         </span>
                       )}
                     </div>
