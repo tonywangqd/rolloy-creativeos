@@ -227,18 +227,26 @@ export async function POST(request: NextRequest) {
     const referenceImageBase64 = await fetchImageAsBase64(referenceImageUrl);
     const mimeType = referenceImageUrl.endsWith('.png') ? 'image/png' : 'image/jpeg';
 
-    // Initialize Gemini
+    // Initialize Gemini with image configuration
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: IMAGE_MODEL });
+
+    // Configure model with image output settings
+    const model = genAI.getGenerativeModel({
+      model: IMAGE_MODEL,
+      generationConfig: {
+        // @ts-ignore - imageConfig is supported but not in types yet
+        responseModalities: ['IMAGE'],
+        // @ts-ignore
+        imageConfig: {
+          imageSize: resolution, // "1K", "2K", or "4K"
+        },
+      },
+    });
 
     // Create image prompt with variation
     const imagePrompt = `Create an advertising photograph based on this reference product image.
 
 ${prompt}
-
-IMAGE SPECIFICATIONS:
-- Aspect Ratio: ${aspectRatio}
-- Resolution: ${resolution}
 
 IMPORTANT INSTRUCTIONS:
 - Keep the walker/rollator product EXACTLY as shown in the reference image
@@ -247,7 +255,9 @@ IMPORTANT INSTRUCTIONS:
 - Maintain photorealistic quality
 - Professional advertising photography style
 - Create a distinct scene different from other variations
-- Generate image with ${aspectRatio} aspect ratio`;
+- Output aspect ratio: ${aspectRatio}`;
+
+    console.log(`Generating ${resolution} image with aspect ratio ${aspectRatio}...`);
 
     // Generate image
     const result = await model.generateContent([
