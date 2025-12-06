@@ -33,13 +33,13 @@ export async function POST(request: NextRequest) {
       reference_image_url,
     } = body;
 
-    if (!creative_name || !abcd_selection || !prompt || !product_state || !reference_image_url) {
+    if (!creative_name || !abcd_selection || !prompt || !product_state) {
       return NextResponse.json<APIResponse>(
         {
           success: false,
           error: {
             code: 'INVALID_REQUEST',
-            message: 'Missing required fields: creative_name, abcd_selection, prompt, product_state, reference_image_url',
+            message: 'Missing required fields: creative_name, abcd_selection, prompt, product_state',
           },
         },
         { status: 400 }
