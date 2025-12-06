@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { Sparkles, Eye, ImageIcon, RefreshCw, Copy, Check, Loader2, StopCircle, Cloud, Play, Pause, Star, Plus, Download, ZoomIn, Trash2 } from "lucide-react";
+import { Sparkles, Eye, ImageIcon, RefreshCw, Copy, Check, Loader2, StopCircle, Cloud, Play, Pause, Star, Plus, Download, ZoomIn, Trash2, ChevronDown, ChevronUp, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -68,6 +68,9 @@ export default function HomePage() {
   // Lightbox state
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+
+  // Prompt panel state (for generate step)
+  const [isPromptPanelOpen, setIsPromptPanelOpen] = useState(true);
 
   // Batch size - generate 4 images at a time
   const BATCH_SIZE = 4;
@@ -614,9 +617,106 @@ export default function HomePage() {
 
           {/* Gallery Step */}
           {step === "generate" && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
+            <div className="space-y-4">
+              {/* Collapsible Prompt Panel */}
+              <Card>
+                <CardHeader
+                  className="cursor-pointer select-none"
+                  onClick={() => setIsPromptPanelOpen(!isPromptPanelOpen)}
+                >
+                  <CardTitle className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Pencil className="h-4 w-4" />
+                      <span>Prompt</span>
+                      {!isPromptPanelOpen && (
+                        <span className="text-sm font-normal text-muted-foreground truncate max-w-[300px]">
+                          - {editedPrompt.slice(0, 50)}...
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleCopyPrompt(); }}>
+                        {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+                      {isPromptPanelOpen ? (
+                        <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                      )}
+                    </div>
+                  </CardTitle>
+                </CardHeader>
+                {isPromptPanelOpen && (
+                  <CardContent className="space-y-4">
+                    <div className="flex gap-4">
+                      {/* Reference Image */}
+                      {referenceImageUrl && (
+                        <div className="flex-shrink-0">
+                          <img
+                            src={referenceImageUrl}
+                            alt="Reference"
+                            className="w-24 h-24 object-cover rounded-lg border"
+                          />
+                          <p className="text-xs text-muted-foreground text-center mt-1">
+                            {productState === "FOLDED" ? "Folded" : "Unfolded"}
+                          </p>
+                        </div>
+                      )}
+                      {/* Prompt Editor */}
+                      <div className="flex-1">
+                        <Textarea
+                          value={editedPrompt}
+                          onChange={(e) => setEditedPrompt(e.target.value)}
+                          rows={4}
+                          className="font-mono text-sm"
+                          placeholder="Edit the prompt here..."
+                        />
+                      </div>
+                    </div>
+                    {/* Settings Row */}
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm text-muted-foreground">Ratio:</label>
+                        <select
+                          value={aspectRatio}
+                          onChange={(e) => setAspectRatio(e.target.value)}
+                          className="h-8 px-2 rounded-md border border-input bg-background text-sm"
+                        >
+                          {ASPECT_RATIOS.map((ratio) => (
+                            <option key={ratio} value={ratio}>{ratio}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm text-muted-foreground">Resolution:</label>
+                        <select
+                          value={resolution}
+                          onChange={(e) => setResolution(e.target.value)}
+                          className="h-8 px-2 rounded-md border border-input bg-background text-sm"
+                        >
+                          {RESOLUTIONS.map((res) => (
+                            <option key={res} value={res}>{res}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex-1" />
+                      <Button
+                        size="sm"
+                        onClick={handleGenerateBatch}
+                        disabled={isGeneratingImages || !editedPrompt}
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Generate {BATCH_SIZE} More
+                      </Button>
+                    </div>
+                  </CardContent>
+                )}
+              </Card>
+
+              {/* Gallery Card */}
+              <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="flex items-center justify-between text-base">
                   <span>
                     Generated Images
                     {isGeneratingImages && (
@@ -626,49 +726,20 @@ export default function HomePage() {
                     )}
                   </span>
                   <div className="flex items-center gap-3">
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-sm font-normal text-muted-foreground">
                       Total: {successCount} | Failed: {failedCount} | Selected: {selectedCount}
                     </span>
-                    {isGeneratingImages ? (
+                    {isGeneratingImages && (
                       <Button variant="destructive" size="sm" onClick={handleStopGeneration}>
                         <StopCircle className="mr-2 h-4 w-4" />
                         Stop
                       </Button>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        {/* Aspect Ratio selector */}
-                        <select
-                          value={aspectRatio}
-                          onChange={(e) => setAspectRatio(e.target.value)}
-                          className="h-8 px-2 rounded-md border border-input bg-background text-xs"
-                          title="Aspect Ratio"
-                        >
-                          {ASPECT_RATIOS.map((ratio) => (
-                            <option key={ratio} value={ratio}>{ratio}</option>
-                          ))}
-                        </select>
-                        {/* Resolution selector */}
-                        <select
-                          value={resolution}
-                          onChange={(e) => setResolution(e.target.value)}
-                          className="h-8 px-2 rounded-md border border-input bg-background text-xs"
-                          title="Resolution"
-                        >
-                          {RESOLUTIONS.map((res) => (
-                            <option key={res} value={res}>{res}</option>
-                          ))}
-                        </select>
-                        <Button size="sm" onClick={handleGenerateBatch}>
-                          <Plus className="mr-2 h-4 w-4" />
-                          Generate {BATCH_SIZE} More
-                        </Button>
-                        {selectedCount > 0 && (
-                          <Button variant="outline" size="sm" onClick={handleDownloadSelected}>
-                            <Download className="mr-2 h-4 w-4" />
-                            Download ({selectedCount})
-                          </Button>
-                        )}
-                      </div>
+                    )}
+                    {!isGeneratingImages && selectedCount > 0 && (
+                      <Button variant="outline" size="sm" onClick={handleDownloadSelected}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Download ({selectedCount})
+                      </Button>
                     )}
                   </div>
                 </CardTitle>
@@ -782,6 +853,7 @@ export default function HomePage() {
                 )}
               </CardContent>
             </Card>
+            </div>
           )}
 
           {/* Initial State */}
