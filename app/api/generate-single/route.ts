@@ -33,6 +33,8 @@ interface GenerateSingleRequest {
   totalImages: number;
   creativeName: string; // For storage path
   sessionId?: string; // For updating database record
+  aspectRatio?: string; // "1:1", "2:3", "3:2", etc.
+  resolution?: string; // "1K", "2K", "4K"
 }
 
 interface APIResponse<T = unknown> {
@@ -168,7 +170,16 @@ async function updateImageRecord(
 export async function POST(request: NextRequest) {
   try {
     const body: GenerateSingleRequest = await request.json();
-    const { prompt, referenceImageUrl, imageIndex, totalImages, creativeName, sessionId } = body;
+    const {
+      prompt,
+      referenceImageUrl,
+      imageIndex,
+      totalImages,
+      creativeName,
+      sessionId,
+      aspectRatio = "1:1",
+      resolution = "1K"
+    } = body;
 
     // Validate request
     if (!prompt || !referenceImageUrl) {
@@ -225,13 +236,18 @@ export async function POST(request: NextRequest) {
 
 ${prompt}
 
+IMAGE SPECIFICATIONS:
+- Aspect Ratio: ${aspectRatio}
+- Resolution: ${resolution}
+
 IMPORTANT INSTRUCTIONS:
 - Keep the walker/rollator product EXACTLY as shown in the reference image
 - Transform ONLY the background, environment, and add human elements
 - This is variation ${imageIndex + 1} of ${totalImages} - make it unique
 - Maintain photorealistic quality
 - Professional advertising photography style
-- Create a distinct scene different from other variations`;
+- Create a distinct scene different from other variations
+- Generate image with ${aspectRatio} aspect ratio`;
 
     // Generate image
     const result = await model.generateContent([

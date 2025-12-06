@@ -46,6 +46,14 @@ export default function HomePage() {
   const [referenceImageUrl, setReferenceImageUrl] = useState("");
   const [creativeName, setCreativeName] = useState("");
 
+  // Image settings
+  const [aspectRatio, setAspectRatio] = useState("1:1");
+  const [resolution, setResolution] = useState("1K");
+
+  // Available options
+  const ASPECT_RATIOS = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"];
+  const RESOLUTIONS = ["1K", "2K", "4K"];
+
   // Generation state
   const [images, setImages] = useState<GeneratedImage[]>([]);
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
@@ -314,6 +322,8 @@ export default function HomePage() {
             totalImages: endIndex,
             creativeName,
             sessionId: activeSessionId,
+            aspectRatio,
+            resolution,
           }),
         });
 
@@ -354,7 +364,7 @@ export default function HomePage() {
 
     setIsGeneratingImages(false);
     await loadSessions();
-  }, [editedPrompt, referenceImageUrl, creativeName, currentSessionId, images.length]);
+  }, [editedPrompt, referenceImageUrl, creativeName, currentSessionId, images.length, aspectRatio, resolution]);
 
   // Stop generation
   const handleStopGeneration = () => {
@@ -547,6 +557,34 @@ export default function HomePage() {
                   />
                 </div>
 
+                {/* Image Settings */}
+                <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Aspect Ratio</label>
+                    <select
+                      value={aspectRatio}
+                      onChange={(e) => setAspectRatio(e.target.value)}
+                      className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
+                    >
+                      {ASPECT_RATIOS.map((ratio) => (
+                        <option key={ratio} value={ratio}>{ratio}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Resolution</label>
+                    <select
+                      value={resolution}
+                      onChange={(e) => setResolution(e.target.value)}
+                      className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
+                    >
+                      {RESOLUTIONS.map((res) => (
+                        <option key={res} value={res}>{res}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
                 <div className="flex gap-3">
                   <Button
                     size="lg"
@@ -657,16 +695,16 @@ export default function HomePage() {
                         </div>
                       )}
 
-                      {/* Selection indicator */}
+                      {/* Selection indicator - top left */}
                       {image.selected && (
-                        <div className="absolute top-2 left-10 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
+                        <div className="absolute top-1 left-1 w-5 h-5 bg-primary rounded-full flex items-center justify-center z-10">
                           <Check className="h-3 w-3 text-primary-foreground" />
                         </div>
                       )}
 
-                      {/* Star rating on thumbnail */}
+                      {/* Star rating on thumbnail - next to selection or top left */}
                       {image.rating > 0 && (
-                        <div className="absolute top-2 left-2 flex items-center gap-0.5 bg-black/60 rounded px-1 py-0.5">
+                        <div className={`absolute top-1.5 ${image.selected ? 'left-7' : 'left-1'} flex items-center gap-0.5 bg-black/60 rounded px-1 py-0.5`}>
                           <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
                           <span className="text-[10px] text-white font-medium">{image.rating}</span>
                         </div>
