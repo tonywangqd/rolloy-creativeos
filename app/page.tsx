@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
-import { Sparkles, Eye, ImageIcon, RefreshCw, Copy, Check, Loader2, StopCircle, Cloud, Play, Pause } from "lucide-react";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { Sparkles, Eye, ImageIcon, RefreshCw, Copy, Check, Loader2, StopCircle, Cloud, Play, Pause, Star, Plus, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { ABCDSelector, type ABCDSelection } from "@/components/creative/abcd-selector";
 import { NamingCard } from "@/components/creative/naming-card";
 import { SessionList } from "@/components/sessions/session-list";
-import type { SessionSummary, GenerationSession } from "@/lib/types/session";
+import { ImageLightbox } from "@/components/creative/image-lightbox";
+import type { SessionSummary } from "@/lib/types/session";
+import { cn } from "@/lib/utils";
 
 type WorkflowStep = "select" | "prompt" | "generate";
 
@@ -17,6 +19,7 @@ interface GeneratedImage {
   url: string;
   storageUrl: string | null;
   selected: boolean;
+  rating: number;
   status: "pending" | "generating" | "success" | "failed";
 }
 
@@ -48,12 +51,20 @@ export default function HomePage() {
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
   const [isGeneratingImages, setIsGeneratingImages] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [shouldStop, setShouldStop] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
 
-  const totalImages = 20;
+  // Use ref to track stop state (avoids stale closure issues)
+  const shouldStopRef = useRef(false);
+
+  // Lightbox state
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+
+  // Batch size - generate 4 images at a time
+  const BATCH_SIZE = 4;
+  // Delay between API calls (1 second)
+  const API_DELAY_MS = 1000;
 
   const isSelectionComplete =
     selection.sceneCategory &&
@@ -83,7 +94,7 @@ export default function HomePage() {
   };
 
   // Create a new session
-  const createSession = async (): Promise<string | null> => {
+  const createSession = async (totalImages: number): Promise<string | null> => {
     try {
       const response = await fetch("/api/sessions", {
         method: "POST",
@@ -107,7 +118,7 @@ export default function HomePage() {
       const data = await response.json();
       if (data.success) {
         setCurrentSessionId(data.data.session.id);
-        await loadSessions(); // Refresh list
+        await loadSessions();
         return data.data.session.id;
       }
       return null;
@@ -125,7 +136,7 @@ export default function HomePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      await loadSessions(); // Refresh list
+      await loadSessions();
     } catch (err) {
       console.error("Failed to update session:", err);
     }
@@ -140,10 +151,7 @@ export default function HomePage() {
       if (data.success) {
         const sessionDetail = data.data;
 
-        // Set current session
         setCurrentSessionId(session.id);
-
-        // Restore selection
         setSelection({
           sceneCategory: sessionDetail.abcd_selection.A1,
           sceneDetail: sessionDetail.abcd_selection.A2,
@@ -151,33 +159,27 @@ export default function HomePage() {
           driver: sessionDetail.abcd_selection.C,
           format: sessionDetail.abcd_selection.D,
         });
-
-        // Restore prompt
         setPrompt(sessionDetail.prompt);
         setEditedPrompt(sessionDetail.prompt);
         setProductState(sessionDetail.product_state);
         setReferenceImageUrl(sessionDetail.reference_image_url);
         setCreativeName(sessionDetail.creative_name);
 
-        // Restore images
         const restoredImages: GeneratedImage[] = sessionDetail.images.map((img: any) => ({
           id: img.id,
           url: img.storage_url || "",
           storageUrl: img.storage_url || null,
           selected: false,
+          rating: img.rating || 0,
           status: img.status === "success" ? "success" : img.status === "failed" ? "failed" : "pending",
         }));
         setImages(restoredImages);
 
-        // Set step based on session status
         if (sessionDetail.status === "draft") {
           setStep("prompt");
         } else {
           setStep("generate");
         }
-
-        // Check if paused
-        setIsPaused(sessionDetail.status === "paused");
       }
     } catch (err) {
       console.error("Failed to load session:", err);
@@ -199,8 +201,7 @@ export default function HomePage() {
     setEditedPrompt("");
     setImages([]);
     setError("");
-    setShouldStop(false);
-    setIsPaused(false);
+    shouldStopRef.current = false;
     setCurrentImageIndex(0);
   };
 
@@ -249,63 +250,57 @@ export default function HomePage() {
     }
   };
 
-  // Step 2: Generate Images One by One
-  const handleGenerateImages = useCallback(async (startIndex: number = 0, sessionId?: string) => {
+  // Generate a batch of images (4 at a time, 1 second delay between each)
+  const handleGenerateBatch = useCallback(async () => {
     setIsGeneratingImages(true);
-    setShouldStop(false);
-    setIsPaused(false);
+    shouldStopRef.current = false;
     setError("");
     setStep("generate");
 
-    let activeSessionId = sessionId || currentSessionId;
+    // Calculate starting index (add to existing images)
+    const startIndex = images.length;
+    const endIndex = startIndex + BATCH_SIZE;
 
-    // Create session if not exists
+    // Create session if first batch
+    let activeSessionId = currentSessionId;
     if (!activeSessionId) {
-      activeSessionId = await createSession();
+      activeSessionId = await createSession(endIndex);
       if (!activeSessionId) {
         setError("Failed to create session");
         setIsGeneratingImages(false);
         return;
       }
     } else {
-      // Update session status to in_progress
       await updateSessionStatus(activeSessionId, "in_progress");
     }
 
-    // Initialize images if starting fresh
-    if (startIndex === 0) {
-      const initialImages: GeneratedImage[] = Array.from({ length: totalImages }, (_, i) => ({
-        id: `img-${i + 1}`,
-        url: "",
-        storageUrl: null,
-        selected: false,
-        status: "pending" as const,
-      }));
-      setImages(initialImages);
-    }
+    // Add pending images for this batch
+    const newPendingImages: GeneratedImage[] = Array.from({ length: BATCH_SIZE }, (_, i) => ({
+      id: `img-${startIndex + i + 1}`,
+      url: "",
+      storageUrl: null,
+      selected: false,
+      rating: 0,
+      status: "pending" as const,
+    }));
+    setImages(prev => [...prev, ...newPendingImages]);
 
-    setCurrentImageIndex(startIndex);
+    // Generate images one by one with delay
+    for (let i = 0; i < BATCH_SIZE; i++) {
+      const globalIndex = startIndex + i;
 
-    // Generate images one by one
-    for (let i = startIndex; i < totalImages; i++) {
-      // Check if user requested stop or pause
-      if (shouldStop) {
+      // Check if user requested stop
+      if (shouldStopRef.current) {
         console.log("Generation stopped by user");
-        await updateSessionStatus(activeSessionId, "cancelled");
-        break;
-      }
-
-      if (isPaused) {
-        console.log("Generation paused by user");
         await updateSessionStatus(activeSessionId, "paused");
         break;
       }
 
-      setCurrentImageIndex(i);
+      setCurrentImageIndex(globalIndex);
 
       // Update current image status to generating
       setImages(prev => prev.map((img, idx) =>
-        idx === i ? { ...img, status: "generating" as const } : img
+        idx === globalIndex ? { ...img, status: "generating" as const } : img
       ));
 
       try {
@@ -315,8 +310,8 @@ export default function HomePage() {
           body: JSON.stringify({
             prompt: editedPrompt,
             referenceImageUrl,
-            imageIndex: i,
-            totalImages,
+            imageIndex: globalIndex,
+            totalImages: endIndex,
             creativeName,
             sessionId: activeSessionId,
           }),
@@ -326,60 +321,44 @@ export default function HomePage() {
 
         if (data.success && data.data.imageUrl) {
           setImages(prev => prev.map((img, idx) =>
-            idx === i ? {
+            idx === globalIndex ? {
               ...img,
               url: data.data.imageUrl,
               storageUrl: data.data.storageUrl || null,
               status: "success" as const
             } : img
           ));
-          if (data.data.storageUrl) {
-            console.log(`Image ${i + 1} saved to: ${data.data.storageUrl}`);
-          }
         } else {
           setImages(prev => prev.map((img, idx) =>
-            idx === i ? { ...img, status: "failed" as const } : img
+            idx === globalIndex ? { ...img, status: "failed" as const } : img
           ));
-          console.error(`Image ${i + 1} failed:`, data.error?.message);
+          console.error(`Image ${globalIndex + 1} failed:`, data.error?.message);
         }
       } catch (err) {
         setImages(prev => prev.map((img, idx) =>
-          idx === i ? { ...img, status: "failed" as const } : img
+          idx === globalIndex ? { ...img, status: "failed" as const } : img
         ));
-        console.error(`Image ${i + 1} error:`, err);
+        console.error(`Image ${globalIndex + 1} error:`, err);
       }
 
-      // Small delay between requests
-      if (i < totalImages - 1 && !shouldStop && !isPaused) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+      // Wait 1 second before next API call (except for the last one)
+      if (i < BATCH_SIZE - 1 && !shouldStopRef.current) {
+        await new Promise(resolve => setTimeout(resolve, API_DELAY_MS));
       }
     }
 
-    // Mark session as completed if all done
-    if (!shouldStop && !isPaused) {
+    // Mark batch as completed
+    if (!shouldStopRef.current) {
       await updateSessionStatus(activeSessionId, "completed");
     }
 
     setIsGeneratingImages(false);
-    await loadSessions(); // Refresh session list
-  }, [editedPrompt, referenceImageUrl, shouldStop, isPaused, creativeName, currentSessionId]);
-
-  // Pause generation
-  const handlePauseGeneration = () => {
-    setIsPaused(true);
-  };
-
-  // Resume generation
-  const handleResumeGeneration = () => {
-    const nextIndex = images.findIndex(img => img.status === "pending");
-    if (nextIndex !== -1) {
-      handleGenerateImages(nextIndex, currentSessionId || undefined);
-    }
-  };
+    await loadSessions();
+  }, [editedPrompt, referenceImageUrl, creativeName, currentSessionId, images.length]);
 
   // Stop generation
   const handleStopGeneration = () => {
-    setShouldStop(true);
+    shouldStopRef.current = true;
   };
 
   // Copy prompt
@@ -396,11 +375,47 @@ export default function HomePage() {
     ));
   };
 
+  // Update image rating
+  const handleRatingChange = (id: string, rating: number) => {
+    setImages(prev => prev.map(img =>
+      img.id === id ? { ...img, rating } : img
+    ));
+  };
+
+  // Open lightbox
+  const openLightbox = (index: number) => {
+    setLightboxIndex(index);
+    setLightboxOpen(true);
+  };
+
+  // Download selected images
+  const handleDownloadSelected = async () => {
+    const selectedImages = images.filter(img => img.selected && img.url);
+    for (let i = 0; i < selectedImages.length; i++) {
+      const img = selectedImages[i];
+      const link = document.createElement("a");
+      link.href = img.url;
+      link.download = `image_${img.id}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      // Small delay between downloads
+      if (i < selectedImages.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+    }
+  };
+
   // Get stats
   const successCount = images.filter(img => img.status === "success").length;
   const failedCount = images.filter(img => img.status === "failed").length;
   const selectedCount = images.filter(img => img.selected).length;
   const savedCount = images.filter(img => img.storageUrl).length;
+
+  // Get successful images for lightbox
+  const successfulImages = images
+    .map((img, index) => ({ ...img, originalIndex: index }))
+    .filter(img => img.status === "success" && img.url);
 
   return (
     <div className="space-y-6">
@@ -442,7 +457,6 @@ export default function HomePage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Sessions + ABCD Selection */}
         <div className="lg:col-span-1 space-y-4">
-          {/* Session List */}
           <SessionList
             sessions={sessions}
             currentSessionId={currentSessionId}
@@ -450,7 +464,6 @@ export default function HomePage() {
             onNewSession={handleNewSession}
           />
 
-          {/* ABCD Selector */}
           <ABCDSelector
             onSelectionChange={setSelection}
             initialSelection={selection}
@@ -505,7 +518,6 @@ export default function HomePage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Reference Image Preview */}
                 {referenceImageUrl && (
                   <div className="flex items-center gap-4 p-3 bg-muted rounded-lg">
                     <img
@@ -522,7 +534,6 @@ export default function HomePage() {
                   </div>
                 )}
 
-                {/* Editable Prompt */}
                 <div>
                   <label className="text-sm font-medium mb-2 block">
                     Edit Prompt (optional) - Modify and confirm, or click Generate directly
@@ -536,23 +547,22 @@ export default function HomePage() {
                   />
                 </div>
 
-                {/* Generate Button */}
                 <div className="flex gap-3">
                   <Button
                     size="lg"
                     className="flex-1"
-                    onClick={() => handleGenerateImages(0)}
+                    onClick={handleGenerateBatch}
                     disabled={isGeneratingImages || !editedPrompt}
                   >
                     <ImageIcon className="mr-2 h-5 w-5" />
-                    Confirm & Generate {totalImages} Images
+                    Generate {BATCH_SIZE} Images
                   </Button>
                 </div>
               </CardContent>
             </Card>
           )}
 
-          {/* Gallery Step - Real-time Generation */}
+          {/* Gallery Step */}
           {step === "generate" && (
             <Card>
               <CardHeader>
@@ -561,31 +571,33 @@ export default function HomePage() {
                     Generated Images
                     {isGeneratingImages && (
                       <span className="ml-2 text-sm font-normal text-muted-foreground">
-                        ({currentImageIndex + 1}/{totalImages})
+                        ({currentImageIndex + 1}/{images.length})
                       </span>
                     )}
                   </span>
                   <div className="flex items-center gap-3">
                     <span className="text-sm text-muted-foreground">
-                      ✓ {successCount} | ✗ {failedCount} | 💾 {savedCount} | Selected: {selectedCount}
+                      Total: {successCount} | Failed: {failedCount} | Selected: {selectedCount}
                     </span>
                     {isGeneratingImages ? (
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="sm" onClick={handlePauseGeneration}>
-                          <Pause className="mr-2 h-4 w-4" />
-                          Pause
-                        </Button>
-                        <Button variant="destructive" size="sm" onClick={handleStopGeneration}>
-                          <StopCircle className="mr-2 h-4 w-4" />
-                          Stop
-                        </Button>
-                      </div>
-                    ) : isPaused && successCount < totalImages ? (
-                      <Button size="sm" onClick={handleResumeGeneration}>
-                        <Play className="mr-2 h-4 w-4" />
-                        Resume
+                      <Button variant="destructive" size="sm" onClick={handleStopGeneration}>
+                        <StopCircle className="mr-2 h-4 w-4" />
+                        Stop
                       </Button>
-                    ) : null}
+                    ) : (
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={handleGenerateBatch}>
+                          <Plus className="mr-2 h-4 w-4" />
+                          Generate {BATCH_SIZE} More
+                        </Button>
+                        {selectedCount > 0 && (
+                          <Button variant="outline" size="sm" onClick={handleDownloadSelected}>
+                            <Download className="mr-2 h-4 w-4" />
+                            Download ({selectedCount})
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </CardTitle>
               </CardHeader>
@@ -594,12 +606,12 @@ export default function HomePage() {
                   {images.map((image, index) => (
                     <div
                       key={image.id}
-                      className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all cursor-pointer
-                        ${image.selected ? "border-primary ring-2 ring-primary/50" : "border-border"}
-                        ${image.status === "generating" ? "border-yellow-500" : ""}
-                        ${image.status === "failed" ? "border-red-500 bg-red-500/10" : ""}
-                      `}
-                      onClick={() => image.status === "success" && toggleImageSelection(image.id)}
+                      className={cn(
+                        "relative aspect-square rounded-lg overflow-hidden border-2 transition-all cursor-pointer group",
+                        image.selected ? "border-primary ring-2 ring-primary/50" : "border-border",
+                        image.status === "generating" && "border-yellow-500",
+                        image.status === "failed" && "border-red-500 bg-red-500/10"
+                      )}
                     >
                       {/* Pending state */}
                       {image.status === "pending" && (
@@ -617,11 +629,26 @@ export default function HomePage() {
 
                       {/* Success state */}
                       {image.status === "success" && image.url && (
-                        <img
-                          src={image.url}
-                          alt={`Generated ${index + 1}`}
-                          className="w-full h-full object-cover"
-                        />
+                        <>
+                          <img
+                            src={image.url}
+                            alt={`Generated ${index + 1}`}
+                            className="w-full h-full object-cover"
+                            onClick={() => openLightbox(successfulImages.findIndex(img => img.id === image.id))}
+                          />
+                          {/* Hover overlay for selection */}
+                          <div
+                            className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleImageSelection(image.id);
+                            }}
+                          >
+                            <div className="text-white text-xs font-medium">
+                              {image.selected ? "Deselect" : "Select"}
+                            </div>
+                          </div>
+                        </>
                       )}
 
                       {/* Failed state */}
@@ -635,6 +662,14 @@ export default function HomePage() {
                       {image.selected && (
                         <div className="absolute top-2 right-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
                           <Check className="h-3 w-3 text-primary-foreground" />
+                        </div>
+                      )}
+
+                      {/* Star rating on thumbnail */}
+                      {image.rating > 0 && (
+                        <div className="absolute top-2 left-2 flex items-center gap-0.5 bg-black/60 rounded px-1 py-0.5">
+                          <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                          <span className="text-[10px] text-white font-medium">{image.rating}</span>
                         </div>
                       )}
 
@@ -653,12 +688,11 @@ export default function HomePage() {
                   ))}
                 </div>
 
-                {/* Save Selected Button */}
-                {selectedCount > 0 && !isGeneratingImages && (
-                  <div className="mt-4 flex justify-end">
-                    <Button>
-                      Save {selectedCount} Selected Images
-                    </Button>
+                {images.length === 0 && (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <ImageIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No images generated yet</p>
+                    <p className="text-sm">Click "Generate {BATCH_SIZE} More" to start</p>
                   </div>
                 )}
               </CardContent>
@@ -677,6 +711,21 @@ export default function HomePage() {
           )}
         </div>
       </div>
+
+      {/* Image Lightbox */}
+      <ImageLightbox
+        images={successfulImages.map(img => ({
+          id: img.id,
+          url: img.url,
+          storageUrl: img.storageUrl,
+          rating: img.rating,
+        }))}
+        currentIndex={lightboxIndex}
+        isOpen={lightboxOpen}
+        onClose={() => setLightboxOpen(false)}
+        onRatingChange={handleRatingChange}
+        onNavigate={setLightboxIndex}
+      />
     </div>
   );
 }
