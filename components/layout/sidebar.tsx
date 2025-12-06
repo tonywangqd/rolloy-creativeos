@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useTransition } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { VERSION, BUILD_TIMESTAMP, formatBeijingTime } from "./version-badge";
 
 const navigation = [
   {
@@ -35,6 +36,14 @@ const navigation = [
 export function Sidebar() {
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [, startTransition] = useTransition();
+
+  // Optimized toggle handler to avoid INP issues
+  const toggleCollapse = useCallback(() => {
+    startTransition(() => {
+      setIsCollapsed(prev => !prev);
+    });
+  }, []);
 
   return (
     <div
@@ -78,12 +87,34 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Collapse Toggle */}
-      <div className="border-t p-2">
+      {/* Version Info + Collapse Toggle */}
+      <div className="border-t p-2 space-y-2">
+        {/* Version Badge */}
+        {!isCollapsed && (
+          <div className="px-2 py-2 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <span className="bg-primary/20 text-primary px-1.5 py-0.5 rounded text-[10px] font-mono">
+                v{VERSION}
+              </span>
+              <span className="text-[10px]">
+                {formatBeijingTime(BUILD_TIMESTAMP)}
+              </span>
+            </div>
+          </div>
+        )}
+        {isCollapsed && (
+          <div className="flex justify-center py-1">
+            <span className="bg-primary/20 text-primary px-1 py-0.5 rounded text-[9px] font-mono">
+              {VERSION}
+            </span>
+          </div>
+        )}
+
+        {/* Collapse Toggle */}
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setIsCollapsed(!isCollapsed)}
+          onClick={toggleCollapse}
           className={cn(
             "w-full",
             isCollapsed ? "justify-center" : "justify-start"
@@ -99,17 +130,6 @@ export function Sidebar() {
           )}
         </Button>
       </div>
-
-      {/* Footer */}
-      {!isCollapsed && (
-        <div className="border-t p-4">
-          <div className="rounded-lg bg-muted p-3">
-            <p className="text-xs text-muted-foreground">
-              Powered by Gemini & Flux
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -466,6 +466,15 @@ export default function HomePage() {
     [images]
   );
 
+  // Pre-compute image ID to lightbox index mapping for O(1) lookup
+  const imageIdToLightboxIndex = useMemo(() => {
+    const map = new Map<string, number>();
+    successfulImages.forEach((img, index) => {
+      map.set(img.id, index);
+    });
+    return map;
+  }, [successfulImages]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -810,7 +819,8 @@ export default function HomePage() {
                               className="w-7 h-7 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                openLightbox(successfulImages.findIndex(img => img.id === image.id));
+                                const lightboxIdx = imageIdToLightboxIndex.get(image.id) ?? 0;
+                                openLightbox(lightboxIdx);
                               }}
                               title="放大预览"
                             >
