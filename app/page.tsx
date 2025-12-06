@@ -21,6 +21,8 @@ interface GeneratedImage {
   selected: boolean;
   rating: number;
   status: "pending" | "generating" | "success" | "failed";
+  aspectRatio?: string;
+  resolution?: string;
 }
 
 export default function HomePage() {
@@ -191,6 +193,8 @@ export default function HomePage() {
           selected: false,
           rating: img.rating || 0,
           status: img.status === "success" ? "success" : img.status === "failed" ? "failed" : "pending",
+          aspectRatio: img.aspect_ratio || undefined,
+          resolution: img.resolution || undefined,
         }));
         setImages(restoredImages);
 
@@ -293,7 +297,7 @@ export default function HomePage() {
       await updateSessionStatus(activeSessionId, "in_progress");
     }
 
-    // Add pending images for this batch
+    // Add pending images for this batch (with current settings)
     const newPendingImages: GeneratedImage[] = Array.from({ length: BATCH_SIZE }, (_, i) => ({
       id: `img-${startIndex + i + 1}`,
       url: "",
@@ -301,6 +305,8 @@ export default function HomePage() {
       selected: false,
       rating: 0,
       status: "pending" as const,
+      aspectRatio,
+      resolution,
     }));
     setImages(prev => [...prev, ...newPendingImages]);
 
@@ -847,9 +853,16 @@ export default function HomePage() {
                         </div>
                       )}
 
-                      {/* Index badge */}
-                      <div className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
-                        {index + 1}
+                      {/* Index badge + specs */}
+                      <div className="absolute bottom-1 left-1 flex items-center gap-1">
+                        <span className="bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
+                          {index + 1}
+                        </span>
+                        {image.aspectRatio && image.resolution && (
+                          <span className="bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
+                            {image.aspectRatio} {image.resolution}
+                          </span>
+                        )}
                       </div>
 
                       {/* Cloud saved indicator */}
