@@ -565,32 +565,62 @@ export default function HomePage() {
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
                   <span>Generated Prompt</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-normal text-muted-foreground">
-                      Product State: <span className="font-medium text-foreground">{productState}</span>
-                    </span>
-                    <Button variant="ghost" size="sm" onClick={handleCopyPrompt}>
-                      {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                    </Button>
-                  </div>
+                  <Button variant="ghost" size="sm" onClick={handleCopyPrompt}>
+                    {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  </Button>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {referenceImageUrl && (
-                  <div className="flex items-center gap-4 p-3 bg-muted rounded-lg">
+                {/* Product State Selector */}
+                <div className="flex items-center gap-4 p-4 bg-muted rounded-lg">
+                  {referenceImageUrl && (
                     <img
                       src={referenceImageUrl}
                       alt="Reference"
-                      className="w-24 h-24 object-cover rounded"
+                      className="w-24 h-24 object-cover rounded-lg border"
                     />
-                    <div>
-                      <p className="font-medium">Reference Image</p>
-                      <p className="text-sm text-muted-foreground">
-                        {productState === "FOLDED" ? "Folded Walker" : "Unfolded Walker"}
-                      </p>
+                  )}
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="font-medium">Product State</p>
+                      <span className="text-xs text-muted-foreground">
+                        AI 自动识别，如有误差可手动调整
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProductState("UNFOLDED");
+                          setReferenceImageUrl(process.env.NEXT_PUBLIC_UNFOLDED_IMAGE_URL || "");
+                        }}
+                        className={cn(
+                          "flex-1 px-4 py-2 rounded-lg border-2 transition-all text-sm font-medium",
+                          productState === "UNFOLDED"
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border hover:border-muted-foreground"
+                        )}
+                      >
+                        UNFOLDED（打开）
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProductState("FOLDED");
+                          setReferenceImageUrl(process.env.NEXT_PUBLIC_FOLDED_IMAGE_URL || "");
+                        }}
+                        className={cn(
+                          "flex-1 px-4 py-2 rounded-lg border-2 transition-all text-sm font-medium",
+                          productState === "FOLDED"
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border hover:border-muted-foreground"
+                        )}
+                      >
+                        FOLDED（折叠）
+                      </button>
                     </div>
                   </div>
-                )}
+                </div>
 
                 <div>
                   <label className="text-sm font-medium mb-2 block">
@@ -682,19 +712,48 @@ export default function HomePage() {
                 {isPromptPanelOpen && (
                   <CardContent className="space-y-4">
                     <div className="flex gap-4">
-                      {/* Reference Image */}
-                      {referenceImageUrl && (
-                        <div className="flex-shrink-0">
+                      {/* Reference Image + State Selector */}
+                      <div className="flex-shrink-0 space-y-2">
+                        {referenceImageUrl && (
                           <img
                             src={referenceImageUrl}
                             alt="Reference"
                             className="w-24 h-24 object-cover rounded-lg border"
                           />
-                          <p className="text-xs text-muted-foreground text-center mt-1">
-                            {productState === "FOLDED" ? "Folded" : "Unfolded"}
-                          </p>
+                        )}
+                        <div className="flex gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setProductState("UNFOLDED");
+                              setReferenceImageUrl(process.env.NEXT_PUBLIC_UNFOLDED_IMAGE_URL || "");
+                            }}
+                            className={cn(
+                              "flex-1 px-2 py-1 rounded text-[10px] font-medium transition-all",
+                              productState === "UNFOLDED"
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted hover:bg-muted/80"
+                            )}
+                          >
+                            打开
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setProductState("FOLDED");
+                              setReferenceImageUrl(process.env.NEXT_PUBLIC_FOLDED_IMAGE_URL || "");
+                            }}
+                            className={cn(
+                              "flex-1 px-2 py-1 rounded text-[10px] font-medium transition-all",
+                              productState === "FOLDED"
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted hover:bg-muted/80"
+                            )}
+                          >
+                            折叠
+                          </button>
                         </div>
-                      )}
+                      </div>
                       {/* Prompt Editor */}
                       <div className="flex-1">
                         <Textarea
