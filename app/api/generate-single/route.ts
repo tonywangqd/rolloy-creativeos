@@ -190,13 +190,21 @@ export async function POST(request: NextRequest) {
     // Build scale instruction based on product state
     // Using specific measurements instead of subjective size words for better AI interpretation
     const scaleInstruction = productState === "FOLDED"
-      ? `MANDATORY SCALE CONSTRAINT: The folded walker measures exactly 66cm (26 inches) in height - equivalent to a 20-inch carry-on suitcase. When a person is present, the folded walker should reach no higher than their knee level. The walker can be carried with one hand like luggage. DO NOT generate an oversized product. Reference: similar dimensions to airline cabin baggage.`
-      : `SCALE CONSTRAINT: The unfolded walker stands approximately 85cm (33 inches) at handle height - reaching waist level of a standing adult. When a senior uses it, their hands rest naturally on the handles at hip level. The walker frame should not exceed chest height of the user.`;
+      ? `MANDATORY SCALE CONSTRAINT:
+Product Dimensions (FOLDED): Height 66cm (26 inches), Width 54cm (21 inches), Depth 30cm (12 inches).
+Size Reference: Equivalent to a 20-inch carry-on suitcase or airline cabin baggage.
+Human Reference: When a person is present, the folded walker should reach no higher than their knee level. The walker can be easily carried with one hand like luggage.
+DO NOT generate an oversized product.`
+      : `MANDATORY SCALE CONSTRAINT:
+Product Dimensions (UNFOLDED): Handle height 90cm (35 inches), Overall height approximately 95cm (37 inches).
+Size Reference: Similar height to a standard office desk or kitchen counter.
+Human Reference: When a senior uses it, their hands rest naturally on the handles at hip/waist level. The top of the walker frame should not exceed the user's chest height. For an average adult (170cm/5'7"), the handles reach just below waist level.
+DO NOT generate an oversized product.`;
 
     // Negative constraints to prevent oversized generation
     const scaleNegativePrompt = productState === "FOLDED"
-      ? `AVOID: oversized product, walker taller than knee height, unrealistic proportions, giant equipment.`
-      : `AVOID: oversized walker, handles above waist level, unrealistic proportions.`;
+      ? `AVOID: oversized product, walker taller than knee height, walker larger than carry-on suitcase, unrealistic proportions, giant equipment.`
+      : `AVOID: oversized walker, handles above waist level, walker taller than chest height, unrealistic proportions, giant equipment.`;
 
     // Validate request
     if (!prompt || !referenceImageUrl) {
