@@ -29,6 +29,7 @@ export function ABCDSelector({ onSelectionChange, initialSelection, disabled }: 
   // Track if we're syncing from parent to avoid loops
   const isSyncingRef = useRef(false);
   const prevInitialRef = useRef<string>("");
+  const syncCounterRef = useRef(0);
 
   // Update state when initialSelection changes (for loading sessions)
   useEffect(() => {
@@ -38,13 +39,22 @@ export function ABCDSelector({ onSelectionChange, initialSelection, disabled }: 
       if (selectionKey !== prevInitialRef.current && initialSelection.sceneCategory) {
         prevInitialRef.current = selectionKey;
         isSyncingRef.current = true;
+        syncCounterRef.current += 1;
+        const currentSync = syncCounterRef.current;
+
         setSceneCategory(initialSelection.sceneCategory);
         setSceneDetail(initialSelection.sceneDetail);
         setAction(initialSelection.action);
         setDriver(initialSelection.driver);
         setFormat(initialSelection.format);
-        // Reset sync flag after state updates
-        setTimeout(() => { isSyncingRef.current = false; }, 0);
+
+        // Reset sync flag after React completes the batch update
+        // Use requestAnimationFrame for more reliable timing
+        requestAnimationFrame(() => {
+          if (syncCounterRef.current === currentSync) {
+            isSyncingRef.current = false;
+          }
+        });
       }
     }
   }, [initialSelection]);
