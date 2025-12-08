@@ -188,9 +188,15 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Build scale instruction based on product state
+    // Using specific measurements instead of subjective size words for better AI interpretation
     const scaleInstruction = productState === "FOLDED"
-      ? `CRITICAL SCALE REFERENCE: The folded walker is COMPACT - only 66cm (26 inches) tall, about knee-height of an adult. It should appear SMALL relative to any human subjects, easily held with one hand. Similar size to a small carry-on suitcase.`
-      : `SCALE REFERENCE: The unfolded walker reaches about waist-height of a standing senior. Hands rest comfortably on the handles at hip level.`;
+      ? `MANDATORY SCALE CONSTRAINT: The folded walker measures exactly 66cm (26 inches) in height - equivalent to a 20-inch carry-on suitcase. When a person is present, the folded walker should reach no higher than their knee level. The walker can be carried with one hand like luggage. DO NOT generate an oversized product. Reference: similar dimensions to airline cabin baggage.`
+      : `SCALE CONSTRAINT: The unfolded walker stands approximately 85cm (33 inches) at handle height - reaching waist level of a standing adult. When a senior uses it, their hands rest naturally on the handles at hip level. The walker frame should not exceed chest height of the user.`;
+
+    // Negative constraints to prevent oversized generation
+    const scaleNegativePrompt = productState === "FOLDED"
+      ? `AVOID: oversized product, walker taller than knee height, unrealistic proportions, giant equipment.`
+      : `AVOID: oversized walker, handles above waist level, unrealistic proportions.`;
 
     // Validate request
     if (!prompt || !referenceImageUrl) {
@@ -261,9 +267,11 @@ ${prompt}
 
 ${scaleInstruction}
 
+${scaleNegativePrompt}
+
 CRITICAL INSTRUCTIONS:
 1. PRODUCT PRESERVATION: The red 'Rolloy Compact Master' rollator must be rendered EXACTLY as shown in the reference image - same design, color, and components. No modifications.
-2. SCALE ACCURACY: Maintain realistic proportions - the product size relative to humans must match real-world scale.
+2. SCALE ACCURACY: Maintain realistic proportions - the product size relative to humans must match real-world scale. Follow the MANDATORY SCALE CONSTRAINT above strictly.
 3. VARIATION: This is variation ${imageIndex + 1} of ${totalImages} - create a unique scene with different camera angle, lighting, or composition.
 4. ASPECT RATIO: Output in ${aspectRatio} format.
 5. QUALITY: Commercial photography style, Photorealistic, Ultra high definition (UHD), professional lighting.`;
