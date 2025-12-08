@@ -20,6 +20,7 @@ import {
 
 interface GeneratePromptRequest {
   selection: ABCDSelection;
+  forceProductState?: 'FOLDED' | 'UNFOLDED'; // Override auto-detected state
 }
 
 interface GeneratePromptResponse {
@@ -59,7 +60,7 @@ function generateCreativeName(selection: ABCDSelection): string {
 export async function POST(request: NextRequest) {
   try {
     const body: GeneratePromptRequest = await request.json();
-    const { selection } = body;
+    const { selection, forceProductState } = body;
 
     // Validate selection
     if (!selection || !selection.A1 || !selection.A2 || !selection.B || !selection.C || !selection.D) {
@@ -76,8 +77,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Determine product state
-    const productState = determineProductState(selection.B);
+    // Determine product state (use forced state if provided, otherwise auto-detect)
+    const productState = forceProductState || determineProductState(selection.B);
     const referenceImageUrl = getReferenceImageUrl(productState);
     const creativeName = generateCreativeName(selection);
 

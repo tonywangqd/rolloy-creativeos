@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, startTransition } from "react";
 import { X, Download, Star, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -31,23 +31,46 @@ export function ImageLightbox({
 }: ImageLightboxProps) {
   const [isDownloading, setIsDownloading] = useState(false);
 
+  // Optimized close handler with startTransition to prevent INP issues
+  const handleClose = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Use startTransition to mark state updates as non-urgent
+    startTransition(() => {
+      onClose();
+    });
+  }, [onClose]);
+
+  // Background click handler
+  const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
+    // Only close if clicking directly on the background
+    if (e.target === e.currentTarget) {
+      startTransition(() => {
+        onClose();
+      });
+    }
+  }, [onClose]);
+
+  const handlePrevious = useCallback(() => {
+    if (currentIndex > 0) {
+      startTransition(() => {
+        onNavigate(currentIndex - 1);
+      });
+    }
+  }, [currentIndex, onNavigate]);
+
+  const handleNext = useCallback(() => {
+    if (currentIndex < images.length - 1) {
+      startTransition(() => {
+        onNavigate(currentIndex + 1);
+      });
+    }
+  }, [currentIndex, images.length, onNavigate]);
+
   if (!isOpen || currentIndex < 0 || currentIndex >= images.length) {
     return null;
   }
 
   const currentImage = images[currentIndex];
-
-  const handlePrevious = () => {
-    if (currentIndex > 0) {
-      onNavigate(currentIndex - 1);
-    }
-  };
-
-  const handleNext = () => {
-    if (currentIndex < images.length - 1) {
-      onNavigate(currentIndex + 1);
-    }
-  };
 
   const handleDownload = async () => {
     if (!currentImage.url) return;
@@ -82,16 +105,18 @@ export function ImageLightbox({
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") onClose();
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      startTransition(() => onClose());
+    }
     if (e.key === "ArrowLeft") handlePrevious();
     if (e.key === "ArrowRight") handleNext();
-  };
+  }, [onClose, handlePrevious, handleNext]);
 
   return (
     <div
       className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
-      onClick={onClose}
+      onClick={handleBackgroundClick}
       onKeyDown={handleKeyDown}
       tabIndex={0}
     >
@@ -100,7 +125,7 @@ export function ImageLightbox({
         variant="ghost"
         size="icon"
         className="absolute top-4 right-4 text-white hover:bg-white/20"
-        onClick={onClose}
+        onClick={handleClose}
       >
         <X className="h-6 w-6" />
       </Button>

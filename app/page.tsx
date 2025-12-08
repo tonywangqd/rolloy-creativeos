@@ -340,6 +340,56 @@ export default function HomePage() {
     setCurrentImageIndex(0);
   };
 
+  // Handle Product State change with Prompt regeneration
+  const handleProductStateChange = async (newState: "FOLDED" | "UNFOLDED") => {
+    const oldState = productState;
+
+    // Update state and reference image immediately
+    setProductState(newState);
+    setReferenceImageUrl(
+      newState === "UNFOLDED"
+        ? process.env.NEXT_PUBLIC_UNFOLDED_IMAGE_URL || ""
+        : process.env.NEXT_PUBLIC_FOLDED_IMAGE_URL || ""
+    );
+
+    // If state actually changed and we have a prompt, regenerate it
+    if (oldState && oldState !== newState && editedPrompt) {
+      setIsGeneratingPrompt(true);
+      setError("");
+
+      try {
+        const response = await fetch("/api/generate-prompt", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            selection: {
+              A1: selection.sceneCategory,
+              A2: selection.sceneDetail,
+              B: selection.action,
+              C: selection.driver,
+              D: selection.format,
+            },
+            forceProductState: newState, // Force specific product state
+          }),
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          setPrompt(data.data.prompt);
+          setEditedPrompt(data.data.prompt);
+        } else {
+          setError(data.error?.message || "Failed to regenerate prompt");
+        }
+      } catch (err) {
+        setError("Network error. Please try again.");
+        console.error(err);
+      } finally {
+        setIsGeneratingPrompt(false);
+      }
+    }
+  };
+
   // Step 1: Generate Prompt
   const handleGeneratePrompt = async () => {
     if (!isSelectionComplete) {
@@ -538,12 +588,28 @@ export default function HomePage() {
   }, []);
 
   // Update image rating - memoized
-  const handleRatingChange = useCallback((id: string, rating: number) => {
-    startTransition(() => {
-      setImages(prev => prev.map(img =>
-        img.id === id ? { ...img, rating } : img
-      ));
-    });
+  const handleRatingChange = useCallback(async (id: string, rating: number) => {
+    // Optimistic update - update UI immediately
+    setImages(prev => prev.map(img =>
+      img.id === id ? { ...img, rating } : img
+    ));
+
+    // Persist to database
+    try {
+      const response = await fetch(`/api/images/${id}/rating`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save rating');
+      }
+    } catch (error) {
+      console.error('Failed to save rating:', error);
+      // Note: We don't rollback the optimistic update for better UX
+      // The rating will be lost on refresh but that's acceptable
+    }
   }, []);
 
   // Open lightbox - memoized
@@ -772,35 +838,38 @@ export default function HomePage() {
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={() => {
-                          setProductState("UNFOLDED");
-                          setReferenceImageUrl(process.env.NEXT_PUBLIC_UNFOLDED_IMAGE_URL || "");
-                        }}
+                        onClick={() => handleProductStateChange("UNFOLDED")}
+                        disabled={isGeneratingPrompt}
                         className={cn(
                           "flex-1 px-4 py-2 rounded-lg border-2 transition-all text-sm font-medium",
                           productState === "UNFOLDED"
                             ? "border-primary bg-primary/10 text-primary"
-                            : "border-border hover:border-muted-foreground"
+                            : "border-border hover:border-muted-foreground",
+                          isGeneratingPrompt && "opacity-50 cursor-not-allowed"
                         )}
                       >
-                        UNFOLDED（打开）
+                        {isGeneratingPrompt && productState !== "UNFOLDED" ? "Regenerating..." : "UNFOLDED（打开）"}
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          setProductState("FOLDED");
-                          setReferenceImageUrl(process.env.NEXT_PUBLIC_FOLDED_IMAGE_URL || "");
-                        }}
+                        onClick={() => handleProductStateChange("FOLDED")}
+                        disabled={isGeneratingPrompt}
                         className={cn(
                           "flex-1 px-4 py-2 rounded-lg border-2 transition-all text-sm font-medium",
                           productState === "FOLDED"
                             ? "border-primary bg-primary/10 text-primary"
-                            : "border-border hover:border-muted-foreground"
+                            : "border-border hover:border-muted-foreground",
+                          isGeneratingPrompt && "opacity-50 cursor-not-allowed"
                         )}
                       >
-                        FOLDED（折叠）
+                        {isGeneratingPrompt && productState !== "FOLDED" ? "Regenerating..." : "FOLDED（折叠）"}
                       </button>
                     </div>
+                    {isGeneratingPrompt && (
+                      <p className="text-xs text-amber-500 mt-1">
+                        正在根据新状态重新生成 Prompt...
+                      </p>
+                    )}
                   </div>
                 </div>
 
