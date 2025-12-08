@@ -299,16 +299,20 @@ CRITICAL INSTRUCTIONS:
             imageIndex
           );
 
-          // Update database record if sessionId provided
-          if (sessionId && storageResult) {
-            await updateImageRecord(
+          // Always update database record if sessionId provided
+          if (sessionId) {
+            console.log(`Updating DB record: session=${sessionId}, index=${imageIndex}, ratio=${aspectRatio}, res=${resolution}`);
+            const dbUpdated = await updateImageRecord(
               sessionId,
               imageIndex,
-              storageResult.publicUrl,
-              storageResult.storagePath,
+              storageResult?.publicUrl || '',
+              storageResult?.storagePath || '',
               aspectRatio,
               resolution
             );
+            console.log(`DB update result: ${dbUpdated ? 'SUCCESS' : 'FAILED'}`);
+          } else {
+            console.log('WARNING: No sessionId provided, skipping DB update');
           }
 
           return NextResponse.json<APIResponse>(
