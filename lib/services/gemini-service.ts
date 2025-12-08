@@ -99,7 +99,7 @@ export class GeminiAPIError extends Error {
 // ============================================================================
 
 const UNFOLDED_ACTIONS = ['walk', 'sit', 'turn', 'stand', 'rest', 'using', 'stroll', 'push', 'roll'];
-const FOLDED_ACTIONS = ['lift', 'pack', 'carry', 'trunk', 'car-trunk', 'store', 'transport', 'fold', 'beside', 'place', 'lean', 'hold'];
+const FOLDED_ACTIONS = ['lift', 'pack', 'carry', 'trunk', 'car-trunk', 'store', 'transport', 'fold', 'beside', 'place', 'lean', 'hold', 'transition'];
 
 export function determineProductState(action: string): ProductState {
   const normalizedAction = action.toLowerCase();
