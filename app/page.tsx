@@ -627,8 +627,32 @@ export default function HomePage() {
     }
   }, []);
 
-  // Get current grid configuration based on selected aspect ratio
-  const gridConfig = useMemo(() => getGridConfig(aspectRatio), [aspectRatio, getGridConfig]);
+  // Get grid configuration based on ACTUAL images' aspect ratios (not selector)
+  const gridConfig = useMemo(() => {
+    // Count aspect ratios of actual images
+    const ratioCounts: Record<string, number> = {};
+    images.forEach(img => {
+      const ratio = img.aspectRatio || "1:1";
+      ratioCounts[ratio] = (ratioCounts[ratio] || 0) + 1;
+    });
+
+    // Find the dominant (most common) aspect ratio
+    let dominantRatio = "1:1";
+    let maxCount = 0;
+    Object.entries(ratioCounts).forEach(([ratio, count]) => {
+      if (count > maxCount) {
+        maxCount = count;
+        dominantRatio = ratio;
+      }
+    });
+
+    // If no images yet, use default layout
+    if (images.length === 0) {
+      return { cols: "grid-cols-4", gap: "gap-3" };
+    }
+
+    return getGridConfig(dominantRatio);
+  }, [images, getGridConfig]);
 
   return (
     <div className="space-y-6">
