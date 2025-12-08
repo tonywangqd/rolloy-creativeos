@@ -6,6 +6,9 @@ import { Header } from "@/components/layout/header";
 import { VersionBadge } from "@/components/layout/version-badge";
 import { Providers } from "@/components/providers";
 
+// Force dynamic rendering to avoid SSR issues with client components
+export const dynamic = 'force-dynamic';
+
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
