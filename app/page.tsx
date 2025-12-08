@@ -614,8 +614,8 @@ export default function HomePage() {
     }
   }, []);
 
-  // Open lightbox - memoized
-  const openLightbox = useCallback((index: number) => {
+  // Open lightbox - memoized (boundary check done later after successfulImages is defined)
+  const openLightboxRaw = useCallback((index: number) => {
     setLightboxIndex(index);
     setLightboxOpen(true);
   }, []);
@@ -637,8 +637,8 @@ export default function HomePage() {
     }
   }, [images]);
 
-  // Delete image - memoized
-  const handleDeleteImage = useCallback((id: string) => {
+  // Delete image - basic version (wrapper with lightbox check added later)
+  const handleDeleteImageBasic = useCallback((id: string) => {
     startTransition(() => {
       setImages(prev => prev.filter(img => img.id !== id));
     });
@@ -668,6 +668,27 @@ export default function HomePage() {
     });
     return map;
   }, [successfulImages]);
+
+  // Open lightbox with boundary check (after successfulImages is defined)
+  const openLightbox = useCallback((index: number) => {
+    // Boundary check to prevent accessing invalid index
+    if (index < 0 || index >= successfulImages.length) {
+      console.warn('Invalid lightbox index:', index, 'max:', successfulImages.length - 1);
+      return;
+    }
+    openLightboxRaw(index);
+  }, [successfulImages.length, openLightboxRaw]);
+
+  // Delete image with lightbox check (after imageIdToLightboxIndex is defined)
+  const handleDeleteImage = useCallback((id: string) => {
+    // Check if we're deleting the currently viewed image in lightbox
+    const deletedImageLightboxIndex = imageIdToLightboxIndex.get(id);
+    if (lightboxOpen && deletedImageLightboxIndex !== undefined && deletedImageLightboxIndex === lightboxIndex) {
+      // Close lightbox when deleting the currently viewed image
+      setLightboxOpen(false);
+    }
+    handleDeleteImageBasic(id);
+  }, [imageIdToLightboxIndex, lightboxOpen, lightboxIndex, handleDeleteImageBasic]);
 
   // Helper: Convert aspect ratio string to CSS value (e.g., "16:9" -> "16/9")
   const getAspectRatioCSS = useCallback((ratio: string | undefined): string => {
