@@ -341,18 +341,31 @@ export default function HomePage() {
               ...img,
               url: data.data.imageUrl,
               storageUrl: data.data.storageUrl || null,
-              status: "success" as const
+              status: "success" as const,
+              // Ensure aspectRatio and resolution are preserved
+              aspectRatio: img.aspectRatio || aspectRatio,
+              resolution: img.resolution || resolution,
             } : img
           ));
         } else {
           setImages(prev => prev.map((img, idx) =>
-            idx === globalIndex ? { ...img, status: "failed" as const } : img
+            idx === globalIndex ? {
+              ...img,
+              status: "failed" as const,
+              aspectRatio: img.aspectRatio || aspectRatio,
+              resolution: img.resolution || resolution,
+            } : img
           ));
           console.error(`Image ${globalIndex + 1} failed:`, data.error?.message);
         }
       } catch (err) {
         setImages(prev => prev.map((img, idx) =>
-          idx === globalIndex ? { ...img, status: "failed" as const } : img
+          idx === globalIndex ? {
+            ...img,
+            status: "failed" as const,
+            aspectRatio: img.aspectRatio || aspectRatio,
+            resolution: img.resolution || resolution,
+          } : img
         ));
         console.error(`Image ${globalIndex + 1} error:`, err);
       }
@@ -474,6 +487,37 @@ export default function HomePage() {
     });
     return map;
   }, [successfulImages]);
+
+  // Helper: Convert aspect ratio string to CSS value (e.g., "16:9" -> "16/9")
+  const getAspectRatioCSS = useCallback((ratio: string | undefined): string => {
+    if (!ratio) return "1/1";
+    return ratio.replace(":", "/");
+  }, []);
+
+  // Helper: Get grid config based on aspect ratio
+  const getGridConfig = useCallback((ratio: string) => {
+    switch (ratio) {
+      case "16:9":
+      case "21:9":
+        return { cols: "grid-cols-2", gap: "gap-4" };
+      case "9:16":
+        return { cols: "grid-cols-4", gap: "gap-3" };
+      case "3:4":
+      case "4:5":
+        return { cols: "grid-cols-3", gap: "gap-3" };
+      case "4:3":
+      case "3:2":
+      case "5:4":
+        return { cols: "grid-cols-3", gap: "gap-3" };
+      case "2:3":
+        return { cols: "grid-cols-4", gap: "gap-3" };
+      default: // 1:1
+        return { cols: "grid-cols-4", gap: "gap-3" };
+    }
+  }, []);
+
+  // Get current grid configuration based on selected aspect ratio
+  const gridConfig = useMemo(() => getGridConfig(aspectRatio), [aspectRatio, getGridConfig]);
 
   return (
     <div className="space-y-6">
@@ -837,111 +881,127 @@ export default function HomePage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-4 gap-3">
-                  {images.map((image, index) => (
-                    <div
-                      key={image.id}
-                      className={cn(
-                        "relative aspect-square rounded-lg overflow-hidden border-2 transition-all cursor-pointer group",
-                        image.selected ? "border-primary ring-2 ring-primary/50" : "border-border",
-                        image.status === "generating" && "border-yellow-500",
-                        image.status === "failed" && "border-red-500 bg-red-500/10"
-                      )}
-                    >
-                      {/* Pending state */}
-                      {image.status === "pending" && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-muted">
-                          <span className="text-xs text-muted-foreground">{index + 1}</span>
-                        </div>
-                      )}
+                <div className={cn("grid", gridConfig.cols, gridConfig.gap)}>
+                  {images.map((image, index) => {
+                    // Use image's own aspect ratio or fall back to current setting
+                    const imageRatio = image.aspectRatio || aspectRatio;
+                    const cssAspectRatio = getAspectRatioCSS(imageRatio);
 
-                      {/* Generating state */}
-                      {image.status === "generating" && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-muted">
-                          <Loader2 className="h-6 w-6 animate-spin text-yellow-500" />
-                        </div>
-                      )}
-
-                      {/* Success state */}
-                      {image.status === "success" && image.url && (
-                        <>
-                          <img
-                            src={image.url}
-                            alt={`Generated ${index + 1}`}
-                            className="w-full h-full object-cover"
-                            onClick={() => toggleImageSelection(image.id)}
-                          />
-                          {/* Action buttons on hover */}
-                          <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                            {/* Zoom button */}
-                            <button
-                              className="w-7 h-7 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const lightboxIdx = imageIdToLightboxIndex.get(image.id) ?? 0;
-                                openLightbox(lightboxIdx);
-                              }}
-                              title="放大预览"
-                            >
-                              <ZoomIn className="h-4 w-4 text-white" />
-                            </button>
-                            {/* Delete button */}
-                            <button
-                              className="w-7 h-7 bg-red-500/60 hover:bg-red-500/80 rounded-full flex items-center justify-center"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteImage(image.id);
-                              }}
-                              title="删除图片"
-                            >
-                              <Trash2 className="h-4 w-4 text-white" />
-                            </button>
-                          </div>
-                        </>
-                      )}
-
-                      {/* Failed state */}
-                      {image.status === "failed" && (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="text-xs text-red-500">Failed</span>
-                        </div>
-                      )}
-
-                      {/* Selection indicator - top left */}
-                      {image.selected && (
-                        <div className="absolute top-1 left-1 w-5 h-5 bg-primary rounded-full flex items-center justify-center z-10">
-                          <Check className="h-3 w-3 text-primary-foreground" />
-                        </div>
-                      )}
-
-                      {/* Star rating on thumbnail - next to selection or top left */}
-                      {image.rating > 0 && (
-                        <div className={`absolute top-1.5 ${image.selected ? 'left-7' : 'left-1'} flex items-center gap-0.5 bg-black/60 rounded px-1 py-0.5`}>
-                          <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                          <span className="text-[10px] text-white font-medium">{image.rating}</span>
-                        </div>
-                      )}
-
-                      {/* Index badge + specs */}
-                      <div className="absolute bottom-1 left-1 flex items-center gap-1">
-                        <span className="bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
-                          {index + 1}
-                        </span>
-                        {image.aspectRatio && image.resolution && (
-                          <span className="bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
-                            {image.aspectRatio} {image.resolution}
-                          </span>
+                    return (
+                      <div
+                        key={image.id}
+                        className={cn(
+                          "relative rounded-xl overflow-hidden border-2 transition-all cursor-pointer group shadow-sm hover:shadow-md",
+                          image.selected ? "border-primary ring-2 ring-primary/30" : "border-border/50 hover:border-border",
+                          image.status === "generating" && "border-yellow-500/70",
+                          image.status === "failed" && "border-red-500/50 bg-red-500/5"
                         )}
-                      </div>
+                        style={{ aspectRatio: cssAspectRatio }}
+                      >
+                        {/* Pending state */}
+                        {image.status === "pending" && (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/80 backdrop-blur-sm">
+                            <span className="text-2xl font-light text-muted-foreground/50">{index + 1}</span>
+                            <span className="text-[10px] text-muted-foreground mt-1">Waiting...</span>
+                          </div>
+                        )}
 
-                      {/* Cloud saved indicator */}
-                      {image.storageUrl && (
-                        <div className="absolute bottom-1 right-1 bg-green-500/80 text-white p-0.5 rounded" title="Saved to cloud">
-                          <Cloud className="h-3 w-3" />
+                        {/* Generating state */}
+                        {image.status === "generating" && (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/80 backdrop-blur-sm">
+                            <Loader2 className="h-8 w-8 animate-spin text-yellow-500" />
+                            <span className="text-xs text-muted-foreground mt-2">Generating...</span>
+                          </div>
+                        )}
+
+                        {/* Success state */}
+                        {image.status === "success" && image.url && (
+                          <>
+                            <img
+                              src={image.url}
+                              alt={`Generated ${index + 1}`}
+                              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                              onClick={() => toggleImageSelection(image.id)}
+                            />
+                            {/* Gradient overlay for better text visibility */}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+                            {/* Action buttons on hover */}
+                            <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                              {/* Zoom button */}
+                              <button
+                                className="w-8 h-8 bg-black/70 hover:bg-black/90 rounded-full flex items-center justify-center backdrop-blur-sm transition-all hover:scale-110"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const lightboxIdx = imageIdToLightboxIndex.get(image.id) ?? 0;
+                                  openLightbox(lightboxIdx);
+                                }}
+                                title="放大预览"
+                              >
+                                <ZoomIn className="h-4 w-4 text-white" />
+                              </button>
+                              {/* Delete button */}
+                              <button
+                                className="w-8 h-8 bg-red-500/80 hover:bg-red-500 rounded-full flex items-center justify-center backdrop-blur-sm transition-all hover:scale-110"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteImage(image.id);
+                                }}
+                                title="删除图片"
+                              >
+                                <Trash2 className="h-4 w-4 text-white" />
+                              </button>
+                            </div>
+                          </>
+                        )}
+
+                        {/* Failed state */}
+                        {image.status === "failed" && (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/50">
+                            <span className="text-sm text-red-500 font-medium">Failed</span>
+                            <span className="text-[10px] text-muted-foreground mt-1">Click to retry</span>
+                          </div>
+                        )}
+
+                        {/* Selection indicator - top left */}
+                        {image.selected && (
+                          <div className="absolute top-2 left-2 w-6 h-6 bg-primary rounded-full flex items-center justify-center z-10 shadow-lg">
+                            <Check className="h-3.5 w-3.5 text-primary-foreground" />
+                          </div>
+                        )}
+
+                        {/* Star rating badge */}
+                        {image.rating > 0 && (
+                          <div className={cn(
+                            "absolute top-2 flex items-center gap-0.5 bg-black/70 backdrop-blur-sm rounded-full px-2 py-1",
+                            image.selected ? "left-10" : "left-2"
+                          )}>
+                            <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                            <span className="text-[11px] text-white font-medium">{image.rating}</span>
+                          </div>
+                        )}
+
+                        {/* Bottom info bar */}
+                        <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between p-2 bg-gradient-to-t from-black/60 to-transparent">
+                          <div className="flex items-center gap-1.5">
+                            <span className="bg-white/20 backdrop-blur-sm text-white text-[11px] px-2 py-0.5 rounded-full font-medium">
+                              #{index + 1}
+                            </span>
+                            {image.aspectRatio && image.resolution && (
+                              <span className="bg-white/20 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded-full">
+                                {image.aspectRatio} · {image.resolution}
+                              </span>
+                            )}
+                          </div>
+                          {/* Cloud saved indicator */}
+                          {image.storageUrl && (
+                            <div className="bg-green-500/90 text-white p-1 rounded-full" title="Saved to cloud">
+                              <Cloud className="h-3 w-3" />
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  ))}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {images.length === 0 && (
