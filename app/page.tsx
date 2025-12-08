@@ -412,6 +412,8 @@ export default function HomePage() {
             C: selection.driver,
             D: selection.format,
           },
+          // Use database-defined product state instead of keyword matching
+          forceProductState: selection.actionProductState,
         }),
       });
 

@@ -16,6 +16,7 @@ export interface ABCDSelection {
   sceneCategory: string; // code like "01-Home"
   sceneDetail: string;   // code like "01-Bedroom"
   action: string;        // code like "01-Walk"
+  actionProductState?: 'FOLDED' | 'UNFOLDED'; // Product state from database
   driver: string;        // code like "01-Independence" (emotion)
   format: string;        // code like "I01-Lifestyle"
 }
@@ -97,6 +98,13 @@ export function ABCDSelector({ onSelectionChange, initialSelection, disabled }: 
     prevCategoryRef.current = sceneCategory;
   }, [sceneCategory]);
 
+  // Get the selected action's product_state
+  const selectedActionProductState = useMemo(() => {
+    if (!action || !actions) return undefined;
+    const selectedAction = actions.find(a => a.code === action);
+    return selectedAction?.product_state;
+  }, [action, actions]);
+
   // Notify parent of changes
   useEffect(() => {
     if (!isSyncingRef.current) {
@@ -104,11 +112,12 @@ export function ABCDSelector({ onSelectionChange, initialSelection, disabled }: 
         sceneCategory,
         sceneDetail,
         action,
+        actionProductState: selectedActionProductState,
         driver,
         format,
       });
     }
-  }, [sceneCategory, sceneDetail, action, driver, format, onSelectionChange]);
+  }, [sceneCategory, sceneDetail, action, selectedActionProductState, driver, format, onSelectionChange]);
 
   // Helper to format display: "Code(中文名称)"
   const formatLabel = (code: string, nameZh: string) => `${code}(${nameZh})`;

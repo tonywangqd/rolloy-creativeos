@@ -42,6 +42,7 @@ export interface Action {
   code: string;
   name_zh: string;
   ai_visual_prompt: string;
+  product_state: 'FOLDED' | 'UNFOLDED';  // Determines which reference image to use
   sort_order: number;
   created_at?: string;
   updated_at?: string;
