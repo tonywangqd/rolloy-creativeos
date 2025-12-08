@@ -9,7 +9,7 @@
 -- A-Scene Category
 CREATE TABLE IF NOT EXISTS a_scene_category (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    code VARCHAR(10) UNIQUE NOT NULL,
+    code VARCHAR(50) UNIQUE NOT NULL,
     name_zh VARCHAR(255) NOT NULL,
     ai_visual_prompt TEXT NOT NULL,
     description TEXT,
@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS a_scene_category (
 -- A-Scene Detail
 CREATE TABLE IF NOT EXISTS a_scene_detail (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    code VARCHAR(10) UNIQUE NOT NULL,
+    code VARCHAR(50) UNIQUE NOT NULL,
     name_zh VARCHAR(255) NOT NULL,
     ai_visual_prompt TEXT NOT NULL,
     category_id UUID NOT NULL REFERENCES a_scene_category(id) ON DELETE RESTRICT,
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS a_scene_detail (
 -- B-Action
 CREATE TABLE IF NOT EXISTS b_action (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    code VARCHAR(10) UNIQUE NOT NULL,
+    code VARCHAR(50) UNIQUE NOT NULL,
     name_zh VARCHAR(255) NOT NULL,
     ai_visual_prompt TEXT NOT NULL,
     description TEXT,
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS b_action (
 -- C-Emotion
 CREATE TABLE IF NOT EXISTS c_emotion (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    code VARCHAR(10) UNIQUE NOT NULL,
+    code VARCHAR(50) UNIQUE NOT NULL,
     name_zh VARCHAR(255) NOT NULL,
     ai_visual_prompt TEXT NOT NULL,
     description TEXT,
@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS c_emotion (
 -- D-Format
 CREATE TABLE IF NOT EXISTS d_format (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    code VARCHAR(10) UNIQUE NOT NULL,
+    code VARCHAR(50) UNIQUE NOT NULL,
     name_zh VARCHAR(255) NOT NULL,
     ai_visual_prompt TEXT NOT NULL,
     description TEXT,
