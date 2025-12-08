@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback, startTransition, useEffect } from "react";
-import { X, Download, Star, ChevronLeft, ChevronRight, AlertCircle } from "lucide-react";
+import { useState, useCallback, startTransition } from "react";
+import { X, Download, Star, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -30,14 +30,6 @@ export function ImageLightbox({
   onNavigate,
 }: ImageLightboxProps) {
   const [isDownloading, setIsDownloading] = useState(false);
-  const [imageError, setImageError] = useState(false);
-  const [useFallbackUrl, setUseFallbackUrl] = useState(false);
-
-  // Reset error state when image changes
-  useEffect(() => {
-    setImageError(false);
-    setUseFallbackUrl(false);
-  }, [currentIndex]);
 
   // Optimized close handler with startTransition to prevent INP issues
   const handleClose = useCallback((e: React.MouseEvent) => {
@@ -81,54 +73,29 @@ export function ImageLightbox({
   const currentImage = images[currentIndex];
 
   // Safety check - if image data is invalid, don't render
-  if (!currentImage) {
-    return null;
-  }
-
-  // Get the effective image URL with fallback logic
-  const primaryUrl = currentImage.url;
-  const fallbackUrl = currentImage.storageUrl;
-  const effectiveUrl = useFallbackUrl && fallbackUrl ? fallbackUrl : (primaryUrl || fallbackUrl);
-
-  // If no URL available at all, don't render
-  if (!effectiveUrl) {
-    console.warn('ImageLightbox: No URL available for image', currentImage.id);
+  if (!currentImage || !currentImage.url) {
     return null;
   }
 
   // Ensure rating is a valid number
   const safeRating = currentImage.rating ?? 0;
 
-  // Handle image load error - try fallback URL
-  const handleImageError = () => {
-    if (!useFallbackUrl && fallbackUrl && fallbackUrl !== primaryUrl) {
-      console.log('ImageLightbox: Primary URL failed, trying fallback:', fallbackUrl);
-      setUseFallbackUrl(true);
-    } else {
-      console.error('ImageLightbox: All URLs failed for image', currentImage.id);
-      setImageError(true);
-    }
-  };
-
   const handleDownload = async () => {
-    if (!effectiveUrl) return;
+    if (!currentImage.url) return;
 
     setIsDownloading(true);
     try {
       // For base64 images
-      if (effectiveUrl.startsWith("data:")) {
+      if (currentImage.url.startsWith("data:")) {
         const link = document.createElement("a");
-        link.href = effectiveUrl;
+        link.href = currentImage.url;
         link.download = `image_${currentIndex + 1}.png`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
       } else {
         // For URL images
-        const response = await fetch(effectiveUrl);
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
+        const response = await fetch(currentImage.url);
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
@@ -141,23 +108,6 @@ export function ImageLightbox({
       }
     } catch (error) {
       console.error("Download failed:", error);
-      // Try fallback URL for download if available
-      if (fallbackUrl && effectiveUrl !== fallbackUrl) {
-        try {
-          const response = await fetch(fallbackUrl);
-          const blob = await response.blob();
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement("a");
-          link.href = url;
-          link.download = `image_${currentIndex + 1}.png`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          URL.revokeObjectURL(url);
-        } catch (fallbackError) {
-          console.error("Fallback download also failed:", fallbackError);
-        }
-      }
     } finally {
       setIsDownloading(false);
     }
@@ -225,27 +175,11 @@ export function ImageLightbox({
       >
         {/* Image */}
         <div className="relative">
-          {imageError ? (
-            // Error state - show error message
-            <div className="flex flex-col items-center justify-center min-h-[300px] min-w-[400px] bg-muted/20 rounded-lg border border-destructive/30">
-              <AlertCircle className="h-12 w-12 text-destructive mb-4" />
-              <p className="text-destructive font-medium">图片加载失败</p>
-              <p className="text-sm text-muted-foreground mt-2 text-center max-w-xs">
-                无法加载此图片，请稍后重试
-              </p>
-              <p className="text-xs text-muted-foreground/60 mt-2 font-mono break-all max-w-xs">
-                {effectiveUrl?.substring(0, 50)}...
-              </p>
-            </div>
-          ) : (
-            <img
-              src={effectiveUrl}
-              alt={`Image ${currentIndex + 1}`}
-              className="max-h-[70vh] max-w-full object-contain rounded-lg"
-              onError={handleImageError}
-              onLoad={() => setImageError(false)}
-            />
-          )}
+          <img
+            src={currentImage.url}
+            alt={`Image ${currentIndex + 1}`}
+            className="max-h-[70vh] max-w-full object-contain rounded-lg"
+          />
           {/* Image counter */}
           <div className="absolute bottom-2 left-2 bg-black/60 text-white text-sm px-2 py-1 rounded">
             {currentIndex + 1} / {images.length}
