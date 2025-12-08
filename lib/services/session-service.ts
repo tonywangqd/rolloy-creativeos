@@ -228,11 +228,43 @@ export async function updateSession(
 }
 
 /**
- * Delete session (cascade deletes images)
+ * Delete session with images from storage
  */
 export async function deleteSession(sessionId: string): Promise<void> {
   const supabase = getSupabaseClient();
 
+  // Step 1: Get all images with storage paths
+  const { data: images, error: fetchError } = await supabase
+    .from('generated_images_v2')
+    .select('storage_path')
+    .eq('session_id', sessionId)
+    .not('storage_path', 'is', null);
+
+  if (fetchError) {
+    console.error('Failed to fetch images for deletion:', fetchError.message);
+  }
+
+  // Step 2: Delete images from Supabase Storage
+  if (images && images.length > 0) {
+    const storagePaths = images
+      .map((img: { storage_path: string | null }) => img.storage_path)
+      .filter((path): path is string => path !== null);
+
+    if (storagePaths.length > 0) {
+      const { error: storageError } = await supabase.storage
+        .from('creative-assets')
+        .remove(storagePaths);
+
+      if (storageError) {
+        console.error('Failed to delete images from storage:', storageError.message);
+        // Continue with deletion even if storage cleanup fails
+      } else {
+        console.log(`Deleted ${storagePaths.length} images from storage`);
+      }
+    }
+  }
+
+  // Step 3: Delete session (cascade deletes image records)
   const { error } = await supabase
     .from('generation_sessions')
     .delete()

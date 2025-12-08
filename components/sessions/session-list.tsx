@@ -15,6 +15,7 @@ interface SessionListProps {
   currentSessionId: string | null;
   onSessionSelect: (session: SessionSummary) => void;
   onNewSession: () => void;
+  onDeleteSession?: (sessionId: string) => Promise<void>;
   className?: string;
 }
 
@@ -23,6 +24,7 @@ export function SessionList({
   currentSessionId,
   onSessionSelect,
   onNewSession,
+  onDeleteSession,
   className,
 }: SessionListProps) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -109,6 +111,7 @@ export function SessionList({
                   session={session}
                   isActive={session.id === currentSessionId}
                   onClick={() => onSessionSelect(session)}
+                  onDelete={onDeleteSession}
                 />
               ))
             )}

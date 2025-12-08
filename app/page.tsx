@@ -202,10 +202,121 @@ export default function HomePage() {
           setStep("prompt");
         } else {
           setStep("generate");
+
+          // Auto-resume: check for pending images and continue generating
+          const pendingImages = restoredImages.filter(img => img.status === "pending");
+          if (pendingImages.length > 0 && sessionDetail.status === "in_progress") {
+            console.log(`Found ${pendingImages.length} pending images, will resume generation...`);
+            // Trigger generation for pending images after a short delay
+            setTimeout(() => {
+              handleResumePendingImages(session.id, sessionDetail, restoredImages);
+            }, 500);
+          }
         }
       }
     } catch (err) {
       console.error("Failed to load session:", err);
+    }
+  };
+
+  // Resume generating pending images for a session
+  const handleResumePendingImages = async (
+    sessionId: string,
+    sessionDetail: any,
+    restoredImages: GeneratedImage[]
+  ) => {
+    // Find pending image indices
+    const pendingIndices = restoredImages
+      .map((img, idx) => img.status === "pending" ? idx : -1)
+      .filter(idx => idx !== -1);
+
+    if (pendingIndices.length === 0) return;
+
+    setIsGeneratingImages(true);
+    shouldStopRef.current = false;
+
+    for (const globalIndex of pendingIndices) {
+      if (shouldStopRef.current) {
+        console.log("Resume generation stopped by user");
+        break;
+      }
+
+      setCurrentImageIndex(globalIndex);
+
+      // Update status to generating
+      setImages(prev => prev.map((img, idx) =>
+        idx === globalIndex ? { ...img, status: "generating" as const } : img
+      ));
+
+      try {
+        const response = await fetch("/api/generate-single", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt: sessionDetail.prompt,
+            referenceImageUrl: sessionDetail.reference_image_url,
+            imageIndex: globalIndex,
+            totalImages: restoredImages.length,
+            creativeName: sessionDetail.creative_name,
+            sessionId: sessionId,
+            aspectRatio: restoredImages[globalIndex]?.aspectRatio || aspectRatio,
+            resolution: restoredImages[globalIndex]?.resolution || resolution,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (data.success && data.data.imageUrl) {
+          setImages(prev => prev.map((img, idx) =>
+            idx === globalIndex ? {
+              ...img,
+              url: data.data.imageUrl,
+              storageUrl: data.data.storageUrl || null,
+              status: "success" as const,
+            } : img
+          ));
+        } else {
+          setImages(prev => prev.map((img, idx) =>
+            idx === globalIndex ? { ...img, status: "failed" as const } : img
+          ));
+        }
+      } catch (err) {
+        setImages(prev => prev.map((img, idx) =>
+          idx === globalIndex ? { ...img, status: "failed" as const } : img
+        ));
+      }
+
+      // Delay between requests
+      if (globalIndex < pendingIndices[pendingIndices.length - 1]) {
+        await new Promise(resolve => setTimeout(resolve, API_DELAY_MS));
+      }
+    }
+
+    setIsGeneratingImages(false);
+    await updateSessionStatus(sessionId, "completed");
+    await loadSessions();
+  };
+
+  // Delete a session
+  const handleDeleteSession = async (sessionId: string) => {
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}`, {
+        method: "DELETE",
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // If deleting current session, reset state
+        if (currentSessionId === sessionId) {
+          handleNewSession();
+        }
+        await loadSessions();
+      } else {
+        console.error("Failed to delete session:", data.error?.message);
+      }
+    } catch (err) {
+      console.error("Failed to delete session:", err);
     }
   };
 
@@ -564,6 +675,7 @@ export default function HomePage() {
             currentSessionId={currentSessionId}
             onSessionSelect={handleSessionSelect}
             onNewSession={handleNewSession}
+            onDeleteSession={handleDeleteSession}
           />
 
           <ABCDSelector
