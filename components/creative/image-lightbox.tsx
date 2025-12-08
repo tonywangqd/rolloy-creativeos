@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, startTransition } from "react";
+import { useState, startTransition } from "react";
 import { X, Download, Star, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -31,51 +31,58 @@ export function ImageLightbox({
 }: ImageLightboxProps) {
   const [isDownloading, setIsDownloading] = useState(false);
 
+  // CRITICAL SAFETY CHECK: Validate all inputs early to prevent 500 errors
+  // Check if images array is valid
+  const safeImages = Array.isArray(images) ? images : [];
+  const safeIndex = typeof currentIndex === 'number' ? currentIndex : -1;
+
+  // Early return if not open or invalid state
+  if (!isOpen || safeImages.length === 0 || safeIndex < 0 || safeIndex >= safeImages.length) {
+    return null;
+  }
+
+  // Get current image with safety check
+  const currentImage = safeImages[safeIndex];
+
+  // Safety check - if image data is invalid, close lightbox
+  if (!currentImage || typeof currentImage.url !== 'string' || !currentImage.url) {
+    // Auto-close on invalid data
+    try { onClose(); } catch {}
+    return null;
+  }
+
   // Optimized close handler with startTransition to prevent INP issues
-  const handleClose = useCallback((e: React.MouseEvent) => {
+  const handleClose = (e: React.MouseEvent) => {
     e.stopPropagation();
-    // Use startTransition to mark state updates as non-urgent
     startTransition(() => {
       onClose();
     });
-  }, [onClose]);
+  };
 
   // Background click handler
-  const handleBackgroundClick = useCallback((e: React.MouseEvent) => {
-    // Only close if clicking directly on the background
+  const handleBackgroundClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
       startTransition(() => {
         onClose();
       });
     }
-  }, [onClose]);
+  };
 
-  const handlePrevious = useCallback(() => {
-    if (currentIndex > 0) {
+  const handlePrevious = () => {
+    if (safeIndex > 0) {
       startTransition(() => {
-        onNavigate(currentIndex - 1);
+        onNavigate(safeIndex - 1);
       });
     }
-  }, [currentIndex, onNavigate]);
+  };
 
-  const handleNext = useCallback(() => {
-    if (currentIndex < images.length - 1) {
+  const handleNext = () => {
+    if (safeIndex < safeImages.length - 1) {
       startTransition(() => {
-        onNavigate(currentIndex + 1);
+        onNavigate(safeIndex + 1);
       });
     }
-  }, [currentIndex, images.length, onNavigate]);
-
-  if (!isOpen || currentIndex < 0 || currentIndex >= images.length) {
-    return null;
-  }
-
-  const currentImage = images[currentIndex];
-
-  // Safety check - if image data is invalid, don't render
-  if (!currentImage || !currentImage.url) {
-    return null;
-  }
+  };
 
   // Ensure rating is a valid number
   const safeRating = currentImage.rating ?? 0;
@@ -89,7 +96,7 @@ export function ImageLightbox({
       if (currentImage.url.startsWith("data:")) {
         const link = document.createElement("a");
         link.href = currentImage.url;
-        link.download = `image_${currentIndex + 1}.png`;
+        link.download = `image_${safeIndex + 1}.png`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -100,7 +107,7 @@ export function ImageLightbox({
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `image_${currentIndex + 1}.png`;
+        link.download = `image_${safeIndex + 1}.png`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -113,13 +120,13 @@ export function ImageLightbox({
     }
   };
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
       startTransition(() => onClose());
     }
     if (e.key === "ArrowLeft") handlePrevious();
     if (e.key === "ArrowRight") handleNext();
-  }, [onClose, handlePrevious, handleNext]);
+  };
 
   return (
     <div
@@ -139,7 +146,7 @@ export function ImageLightbox({
       </Button>
 
       {/* Navigation - Previous */}
-      {currentIndex > 0 && (
+      {safeIndex > 0 && (
         <Button
           variant="ghost"
           size="icon"
@@ -154,7 +161,7 @@ export function ImageLightbox({
       )}
 
       {/* Navigation - Next */}
-      {currentIndex < images.length - 1 && (
+      {safeIndex < safeImages.length - 1 && (
         <Button
           variant="ghost"
           size="icon"
@@ -177,12 +184,12 @@ export function ImageLightbox({
         <div className="relative">
           <img
             src={currentImage.url}
-            alt={`Image ${currentIndex + 1}`}
+            alt={`Image ${safeIndex + 1}`}
             className="max-h-[70vh] max-w-full object-contain rounded-lg"
           />
           {/* Image counter */}
           <div className="absolute bottom-2 left-2 bg-black/60 text-white text-sm px-2 py-1 rounded">
-            {currentIndex + 1} / {images.length}
+            {safeIndex + 1} / {safeImages.length}
           </div>
         </div>
 

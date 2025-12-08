@@ -614,13 +614,10 @@ export default function HomePage() {
     }
   }, []);
 
-  // Open lightbox - memoized with boundary check
-  const openLightbox = useCallback((index: number, maxLength: number) => {
-    // Boundary check to prevent 500 error
-    if (index >= 0 && index < maxLength) {
-      setLightboxIndex(index);
-      setLightboxOpen(true);
-    }
+  // Open lightbox - memoized
+  const openLightbox = useCallback((index: number) => {
+    setLightboxIndex(index);
+    setLightboxOpen(true);
   }, []);
 
   // Download selected images - memoized
@@ -640,10 +637,8 @@ export default function HomePage() {
     }
   }, [images]);
 
-  // Delete image - memoized (closes lightbox to prevent stale index)
+  // Delete image - memoized
   const handleDeleteImage = useCallback((id: string) => {
-    // Close lightbox to prevent index out of bounds error
-    setLightboxOpen(false);
     startTransition(() => {
       setImages(prev => prev.filter(img => img.id !== id));
     });
@@ -1146,11 +1141,8 @@ export default function HomePage() {
                                 className="w-8 h-8 bg-black/70 hover:bg-black/90 rounded-full flex items-center justify-center backdrop-blur-sm transition-all hover:scale-110"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  const lightboxIdx = imageIdToLightboxIndex.get(image.id);
-                                  // Only open if valid index found
-                                  if (lightboxIdx !== undefined) {
-                                    openLightbox(lightboxIdx, successfulImages.length);
-                                  }
+                                  const lightboxIdx = imageIdToLightboxIndex.get(image.id) ?? 0;
+                                  openLightbox(lightboxIdx);
                                 }}
                                 title="放大预览"
                               >
