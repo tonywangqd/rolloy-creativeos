@@ -35,6 +35,7 @@ interface GenerateSingleRequest {
   sessionId?: string; // For updating database record
   aspectRatio?: string; // "1:1", "2:3", "3:2", etc.
   resolution?: string; // "1K", "2K", "4K"
+  productState?: "FOLDED" | "UNFOLDED"; // Product state for scale reference
 }
 
 interface APIResponse<T = unknown> {
@@ -182,8 +183,14 @@ export async function POST(request: NextRequest) {
       creativeName,
       sessionId,
       aspectRatio = "1:1",
-      resolution = "1K"
+      resolution = "1K",
+      productState = "UNFOLDED"
     } = body;
+
+    // Build scale instruction based on product state
+    const scaleInstruction = productState === "FOLDED"
+      ? `CRITICAL SCALE REFERENCE: The folded walker is COMPACT - only 66cm (26 inches) tall, about knee-height of an adult. It should appear SMALL relative to any human subjects, easily held with one hand. Similar size to a small carry-on suitcase.`
+      : `SCALE REFERENCE: The unfolded walker reaches about waist-height of a standing senior. Hands rest comfortably on the handles at hip level.`;
 
     // Validate request
     if (!prompt || !referenceImageUrl) {
@@ -252,9 +259,12 @@ export async function POST(request: NextRequest) {
 
 ${prompt}
 
+${scaleInstruction}
+
 IMPORTANT INSTRUCTIONS:
 - Keep the walker/rollator product EXACTLY as shown in the reference image
 - Transform ONLY the background, environment, and add human elements
+- MAINTAIN CORRECT PROPORTIONS - the product size relative to humans must be realistic
 - This is variation ${imageIndex + 1} of ${totalImages} - make it unique
 - Maintain photorealistic quality
 - Professional advertising photography style

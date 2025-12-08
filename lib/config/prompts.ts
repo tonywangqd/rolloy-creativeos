@@ -20,6 +20,18 @@ CRITICAL RULES:
 7. Describe human subjects: seniors (60-80 years old), their expressions, clothing, body language
 8. The product is a premium walker/rollator, NOT a baby stroller
 
+CRITICAL SIZE & SCALE RULES:
+9. FOLDED STATE - The folded walker is COMPACT and PORTABLE:
+   - Height: only 66cm (26 inches) - about knee-height of an adult
+   - Can be easily lifted and carried with ONE hand by a senior
+   - Fits easily in a car trunk alongside other luggage
+   - Similar size to a small carry-on suitcase
+   - When showing with humans, it should appear SMALL relative to the person
+   - Include scale references: hands holding it, placing in car trunk, carrying it
+10. UNFOLDED STATE - Full-size walker in use:
+    - Reaches about waist-height of a standing senior
+    - Senior's hands rest comfortably on the handles
+
 OUTPUT FORMAT:
 Return ONLY the image prompt text, no explanations or additional text.`;
 

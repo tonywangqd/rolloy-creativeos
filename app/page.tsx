@@ -261,6 +261,7 @@ export default function HomePage() {
             sessionId: sessionId,
             aspectRatio: restoredImages[globalIndex]?.aspectRatio || aspectRatio,
             resolution: restoredImages[globalIndex]?.resolution || resolution,
+            productState: sessionDetail.product_state,
           }),
         });
 
@@ -441,6 +442,7 @@ export default function HomePage() {
             sessionId: activeSessionId,
             aspectRatio,
             resolution,
+            productState,
           }),
         });
 
