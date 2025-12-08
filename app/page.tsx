@@ -1244,7 +1244,7 @@ export default function HomePage() {
           id: img.id,
           url: img.url,
           storageUrl: img.storageUrl,
-          rating: img.rating,
+          rating: img.rating ?? 0,
         }))}
         currentIndex={lightboxIndex}
         isOpen={lightboxOpen}

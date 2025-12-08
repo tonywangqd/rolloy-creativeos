@@ -72,6 +72,14 @@ export function ImageLightbox({
 
   const currentImage = images[currentIndex];
 
+  // Safety check - if image data is invalid, don't render
+  if (!currentImage || !currentImage.url) {
+    return null;
+  }
+
+  // Ensure rating is a valid number
+  const safeRating = currentImage.rating ?? 0;
+
   const handleDownload = async () => {
     if (!currentImage.url) return;
 
@@ -192,14 +200,14 @@ export function ImageLightbox({
                 <Star
                   className={cn(
                     "h-6 w-6 transition-colors",
-                    star <= currentImage.rating
+                    star <= safeRating
                       ? "fill-yellow-400 text-yellow-400"
                       : "text-muted-foreground hover:text-yellow-400"
                   )}
                 />
               </button>
             ))}
-            {currentImage.rating > 0 && (
+            {safeRating > 0 && (
               <button
                 onClick={() => onRatingChange(currentImage.id, 0)}
                 className="ml-2 text-xs text-muted-foreground hover:text-foreground"
