@@ -139,35 +139,44 @@ Product State: ${productState} (${productState === 'FOLDED' ? 'compact, portable
 function buildUserPrompt(selection: ABCDSelection, productState: ProductState): string {
   const context = buildContextString(selection, productState);
 
-  // Scale instruction based on product state
-  const scaleContext = productState === 'FOLDED'
-    ? `CRITICAL SCALE: The folded walker is COMPACT - only 66cm (26 inches) tall, about knee-height. It can be held with ONE hand, fits in a car trunk. Show it as SMALL relative to the human subject.`
-    : `SCALE: The unfolded walker reaches waist-height of a standing senior. Hands rest comfortably on handles.`;
+  // Scale and action guidance based on product state
+  const stateGuidance = productState === 'FOLDED'
+    ? `FOLDED WALKER GUIDANCE:
+- The folded walker is COMPACT - only 66cm (26 inches) tall, about knee-height
+- Show it being: lifted with ONE hand, placed in car trunk, carried easily, standing upright in a shipping box
+- It should appear SMALL relative to the human - similar to a small carry-on suitcase
+- Example actions: lifting from ground, placing in trunk, unboxing, carrying to car`
+    : `UNFOLDED WALKER GUIDANCE:
+- The walker reaches waist-height of a standing senior
+- Senior's hands rest comfortably on the handles at hip level
+- Example actions: walking with support, sitting on the seat, strolling in park, resting on seat`;
 
-  return `Generate an advertising image prompt for the following scenario:
+  return `Generate a DETAILED commercial advertising image prompt (150-200 words) for this scenario:
 
 ${context}
 
-${scaleContext}
+${stateGuidance}
 
-Target Audience: Seniors (60-80 years old) and their adult children who value independence, safety, and modern design.
+REQUIRED PROMPT ELEMENTS (follow this structure):
+1. SHOT TYPE: Start with camera angle and shot type (e.g., "A dynamic, eye-level medium shot of...")
+2. SUBJECT: Describe the person in detail:
+   - "realistic, older American [man/woman]"
+   - Hair: specific style and color (e.g., "stylish, short silver hair", "soft, chin-length gray hair")
+   - Expression: genuine emotion (e.g., "pleasant, capable expression", "joyful and genuinely surprised smile")
+3. CLOTHING: Specific outfit with colors and materials (e.g., "clean, white linen button-down shirt and classic beige khaki pants")
+4. ACTION: What the person is doing with the red 'Rolloy Compact Master' rollator
+5. ENVIRONMENT: Detailed scene with:
+   - Location (living room, park, driveway, etc.)
+   - Background elements (furniture, plants, architecture)
+   - Floor/ground materials
+6. PRODUCT STATEMENT: Include exactly: "The 'Rolloy Compact Master' rollator shown must be rendered exactly as it appears in the provided product reference image, with absolutely no edits or changes to its design, color, or components."
+7. CAMERA: Specific lens (e.g., "Captured with a 50mm prime lens")
+8. LIGHTING: Time of day and light quality (e.g., "soft morning sunlight streams in from a large window")
+9. QUALITY STATEMENT: End with: "The image must be in a commercial photography style. It must be Photorealistic, Ultra high definition (UHD), super clear, and feature professional, bright, and clean commercial lighting."
 
-CRITICAL REQUIREMENTS:
-- Focus on lighting, atmosphere, emotion, and human interaction
-- DO NOT describe the walker's physical structure
-- Be specific about time of day and lighting conditions
-- Describe the senior subject in detail (age, expression, clothing)
-- Include environmental details and background elements
-- Match the emotional tone: ${selection.D}
+IMPORTANT: The product is a RED rollator. Always call it "red 'Rolloy Compact Master' rollator".
 
-PHOTOREALISM (IMPORTANT - Avoid AI-generated look):
-- Specify camera: "shot on Canon EOS R5, 85mm f/1.4 lens"
-- Natural skin texture with pores, age spots, wrinkles - NOT smooth/plastic
-- Candid expression, genuine emotion - NOT stock photo smile
-- Natural color palette, muted film-like tones - NOT oversaturated
-- Include imperfections: lens flare, dust in light, fabric texture, hair flyaways
-
-Generate the prompt now:`;
+Generate the detailed prompt now as a single flowing paragraph:`;
 }
 
 /**

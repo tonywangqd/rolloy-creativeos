@@ -255,28 +255,18 @@ export async function POST(request: NextRequest) {
     });
 
     // Create image prompt with variation
-    const imagePrompt = `Create an advertising photograph based on this reference product image.
+    const imagePrompt = `Create a commercial advertising photograph based on this reference product image.
 
 ${prompt}
 
 ${scaleInstruction}
 
-PHOTOREALISM REQUIREMENTS (CRITICAL):
-- Shot on Canon EOS R5 with 85mm f/1.4 lens, shallow depth of field with natural bokeh
-- Natural skin texture with visible pores, age spots, subtle wrinkles - NOT smooth/plastic skin
-- Authentic candid expression - genuine emotion, NOT stock photo smile
-- Natural color palette with muted, film-like tones - NOT oversaturated or HDR
-- Include natural imperfections: slight lens flare, dust particles in light, fabric texture, hair flyaways
-- Realistic lighting with natural shadows - NOT perfectly even studio lighting
-- Lived-in environment with natural wear and authentic details
-
-IMPORTANT INSTRUCTIONS:
-- Keep the walker/rollator product EXACTLY as shown in the reference image
-- Transform ONLY the background, environment, and add human elements
-- MAINTAIN CORRECT PROPORTIONS - the product size relative to humans must be realistic
-- This is variation ${imageIndex + 1} of ${totalImages} - make it unique
-- Create a distinct scene different from other variations
-- Output aspect ratio: ${aspectRatio}`;
+CRITICAL INSTRUCTIONS:
+1. PRODUCT PRESERVATION: The red 'Rolloy Compact Master' rollator must be rendered EXACTLY as shown in the reference image - same design, color, and components. No modifications.
+2. SCALE ACCURACY: Maintain realistic proportions - the product size relative to humans must match real-world scale.
+3. VARIATION: This is variation ${imageIndex + 1} of ${totalImages} - create a unique scene with different camera angle, lighting, or composition.
+4. ASPECT RATIO: Output in ${aspectRatio} format.
+5. QUALITY: Commercial photography style, Photorealistic, Ultra high definition (UHD), professional lighting.`;
 
     console.log(`Generating ${resolution} image with aspect ratio ${aspectRatio}...`);
 
