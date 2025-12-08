@@ -261,13 +261,20 @@ ${prompt}
 
 ${scaleInstruction}
 
+PHOTOREALISM REQUIREMENTS (CRITICAL):
+- Shot on Canon EOS R5 with 85mm f/1.4 lens, shallow depth of field with natural bokeh
+- Natural skin texture with visible pores, age spots, subtle wrinkles - NOT smooth/plastic skin
+- Authentic candid expression - genuine emotion, NOT stock photo smile
+- Natural color palette with muted, film-like tones - NOT oversaturated or HDR
+- Include natural imperfections: slight lens flare, dust particles in light, fabric texture, hair flyaways
+- Realistic lighting with natural shadows - NOT perfectly even studio lighting
+- Lived-in environment with natural wear and authentic details
+
 IMPORTANT INSTRUCTIONS:
 - Keep the walker/rollator product EXACTLY as shown in the reference image
 - Transform ONLY the background, environment, and add human elements
 - MAINTAIN CORRECT PROPORTIONS - the product size relative to humans must be realistic
 - This is variation ${imageIndex + 1} of ${totalImages} - make it unique
-- Maintain photorealistic quality
-- Professional advertising photography style
 - Create a distinct scene different from other variations
 - Output aspect ratio: ${aspectRatio}`;
 
