@@ -94,6 +94,8 @@ export interface GeneratedImage {
   width?: number;
   height?: number;
   mime_type: string;
+  aspect_ratio?: string;  // "1:1", "16:9", "9:16", etc.
+  resolution?: string;    // "1K", "2K", "4K"
 
   // Generation Status
   status: ImageGenerationStatus;
