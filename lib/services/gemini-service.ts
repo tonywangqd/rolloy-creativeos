@@ -3,12 +3,16 @@
  *
  * Handles both text generation (prompts) and image generation using Google Gemini API
  * Uses gemini-3-pro-preview for text and gemini-3-pro-image-preview for images
+ *
+ * IMPORTANT: This service now uses AI Visual Prompt contexts from the database
+ * to generate rich, contextual prompts instead of generic code-based prompts.
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { DEFAULT_SYSTEM_PROMPT } from '@/lib/config/prompts';
+import type { ABCDContexts } from '@/lib/services/abcd-context-service';
 
 // ============================================================================
 // Configuration
@@ -70,6 +74,7 @@ export interface GeminiPromptRequest {
   selection: ABCDSelection;
   productState: ProductState;
   additionalContext?: string;
+  contexts?: ABCDContexts;  // NEW: AI Visual Prompt contexts from database
 }
 
 export interface GeminiPromptResponse {
@@ -126,7 +131,45 @@ export function getReferenceImageUrl(state: ProductState): string {
 // Prompt Generation Functions
 // ============================================================================
 
-function buildContextString(selection: ABCDSelection, productState: ProductState): string {
+/**
+ * Build context string using AI Visual Prompts from database
+ * Falls back to codes if contexts not available
+ */
+function buildContextString(
+  selection: ABCDSelection,
+  productState: ProductState,
+  contexts?: ABCDContexts
+): string {
+  // If we have database contexts, use the rich AI Visual Prompts
+  if (contexts) {
+    const sceneCategoryPrompt = contexts.sceneCategory?.ai_visual_prompt || `${selection.A1} setting`;
+    const sceneDetailPrompt = contexts.sceneDetail?.ai_visual_prompt || `${selection.A2} environment`;
+    const actionPrompt = contexts.action?.ai_visual_prompt || `${selection.B} action`;
+    const emotionPrompt = contexts.emotion?.ai_visual_prompt || `${selection.C} emotion`;
+    const formatPrompt = contexts.format?.ai_visual_prompt || `${selection.D} format`;
+
+    return `
+SCENE CATEGORY (Atmosphere & Vibe):
+${sceneCategoryPrompt}
+
+SCENE DETAIL (Specific Visual Elements):
+${sceneDetailPrompt}
+
+ACTION & PRODUCT STATE (The "Magic" Logic):
+${actionPrompt}
+
+EMOTIONAL DRIVER/BARRIER (User Motivation):
+${emotionPrompt}
+
+IMAGE FORMAT (Composition & Structure):
+${formatPrompt}
+
+Product State: ${productState} (${productState === 'FOLDED' ? 'compact, portable, folded for storage/transport' : 'in-use, fully open and functional'})
+`.trim();
+  }
+
+  // Fallback to legacy code-only context
+  console.warn('Using legacy context string - no database contexts provided');
   return `
 Environment: ${selection.A1} setting, specifically ${selection.A2}
 Action: ${selection.B}
@@ -136,8 +179,12 @@ Product State: ${productState} (${productState === 'FOLDED' ? 'compact, portable
 `.trim();
 }
 
-function buildUserPrompt(selection: ABCDSelection, productState: ProductState): string {
-  const context = buildContextString(selection, productState);
+function buildUserPrompt(
+  selection: ABCDSelection,
+  productState: ProductState,
+  contexts?: ABCDContexts
+): string {
+  const context = buildContextString(selection, productState, contexts);
 
   // Scale and action guidance based on product state
   const stateGuidance = productState === 'FOLDED'
@@ -150,6 +197,10 @@ function buildUserPrompt(selection: ABCDSelection, productState: ProductState): 
 - The walker reaches waist-height of a standing senior
 - Senior's hands rest comfortably on the handles at hip level
 - Example actions: walking with support, sitting on the seat, strolling in park, resting on seat`;
+
+  // Log context usage for debugging
+  const usingDatabaseContexts = !!(contexts?.sceneCategory?.ai_visual_prompt);
+  console.log(`Building user prompt (database contexts: ${usingDatabaseContexts})`);
 
   return `Generate a DETAILED commercial advertising image prompt (150-200 words) for this scenario:
 
@@ -181,6 +232,12 @@ Generate the detailed prompt now as a single flowing paragraph:`;
 
 /**
  * Generate prompt using Gemini API (text model)
+ *
+ * @param request - The prompt request including ABCD selection and optional contexts
+ * @returns Generated prompt with metadata
+ *
+ * IMPORTANT: When contexts are provided, the prompt will include rich AI Visual
+ * Prompt data from the database. This significantly improves prompt quality.
  */
 export async function generatePrompt(request: GeminiPromptRequest): Promise<GeminiPromptResponse> {
   if (!GEMINI_API_KEY) {
@@ -197,7 +254,17 @@ export async function generatePrompt(request: GeminiPromptRequest): Promise<Gemi
       systemInstruction: systemPrompt,
     });
 
-    const userPrompt = buildUserPrompt(request.selection, request.productState);
+    // Build user prompt with database contexts if available
+    const userPrompt = buildUserPrompt(
+      request.selection,
+      request.productState,
+      request.contexts  // Pass contexts to include AI Visual Prompts
+    );
+
+    // Log context usage
+    const databaseContextUsed = !!(request.contexts?.sceneCategory?.ai_visual_prompt);
+    console.log(`Generating prompt (database contexts: ${databaseContextUsed}, state: ${request.productState})`);
+
     const result = await model.generateContent(userPrompt);
     const response = result.response;
     const prompt = response.text().trim();
@@ -206,13 +273,24 @@ export async function generatePrompt(request: GeminiPromptRequest): Promise<Gemi
       throw new GeminiAPIError('Gemini returned empty prompt');
     }
 
+    // Track which contexts were used
+    const contextsLoaded = request.contexts ? {
+      sceneCategory: !!request.contexts.sceneCategory?.ai_visual_prompt,
+      sceneDetail: !!request.contexts.sceneDetail?.ai_visual_prompt,
+      action: !!request.contexts.action?.ai_visual_prompt,
+      emotion: !!request.contexts.emotion?.ai_visual_prompt,
+      format: !!request.contexts.format?.ai_visual_prompt,
+    } : undefined;
+
     return {
       prompt,
       metadata: {
         model: TEXT_MODEL,
         timestamp: new Date().toISOString(),
         tokensUsed: response.usageMetadata?.totalTokenCount,
-      },
+        databaseContextUsed,  // NEW: Track if database contexts were used
+        contextsLoaded,       // NEW: Track which contexts were loaded
+      } as any,  // Extended metadata
     };
   } catch (error) {
     if (error instanceof GeminiAPIError) {

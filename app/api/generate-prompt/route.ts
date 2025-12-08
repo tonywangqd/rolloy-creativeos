@@ -4,6 +4,10 @@
  * POST /api/generate-prompt
  * Generates the image prompt without generating images
  * Used for the preview step before image generation
+ *
+ * IMPORTANT: This API now fetches AI Visual Prompt contexts from the database
+ * to generate rich, contextual prompts. The product state is also determined
+ * from the database when available.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -13,6 +17,10 @@ import {
   getReferenceImageUrl,
   ABCDSelection,
 } from '@/lib/services/gemini-service';
+import {
+  fetchABCDContexts,
+  getProductStateFromContext,
+} from '@/lib/services/abcd-context-service';
 
 // ============================================================================
 // Types
@@ -77,18 +85,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Determine product state (use forced state if provided, otherwise auto-detect)
-    const productState = forceProductState || determineProductState(selection.B);
+    // CRITICAL: Fetch AI Visual Prompt contexts from database
+    console.log('Fetching ABCD contexts from database...');
+    const contexts = await fetchABCDContexts(selection);
+
+    // Determine product state:
+    // 1. Use forceProductState if provided (from frontend when user explicitly switches)
+    // 2. Otherwise use database product_state from action context
+    // 3. Fallback to keyword-based detection (legacy)
+    let productState: 'FOLDED' | 'UNFOLDED';
+    if (forceProductState) {
+      productState = forceProductState;
+      console.log(`Using forced product state: ${productState}`);
+    } else {
+      productState = getProductStateFromContext(contexts.action, determineProductState);
+      console.log(`Product state from database: ${productState} (action: ${selection.B})`);
+    }
+
     const referenceImageUrl = getReferenceImageUrl(productState);
     const creativeName = generateCreativeName(selection);
 
     console.log('Generating prompt for:', creativeName);
     console.log('Product State:', productState);
+    console.log('Database contexts loaded:', {
+      sceneCategory: !!contexts.sceneCategory?.ai_visual_prompt,
+      sceneDetail: !!contexts.sceneDetail?.ai_visual_prompt,
+      action: !!contexts.action?.ai_visual_prompt,
+      emotion: !!contexts.emotion?.ai_visual_prompt,
+      format: !!contexts.format?.ai_visual_prompt,
+    });
 
-    // Generate prompt using Gemini
+    // Generate prompt using Gemini with database contexts
     const promptResult = await generatePrompt({
       selection,
       productState,
+      contexts,  // NEW: Pass database contexts for rich prompt generation
     });
 
     const response: GeneratePromptResponse = {
@@ -99,6 +130,10 @@ export async function POST(request: NextRequest) {
       metadata: {
         model: promptResult.metadata.model,
         timestamp: promptResult.metadata.timestamp,
+        // Include context usage info in response
+        ...(promptResult.metadata as any).databaseContextUsed !== undefined && {
+          databaseContextUsed: (promptResult.metadata as any).databaseContextUsed,
+        },
       },
     };
 
