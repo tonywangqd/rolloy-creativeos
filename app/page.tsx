@@ -1019,8 +1019,8 @@ export default function HomePage() {
               <CardContent>
                 <div className={cn("grid", gridConfig.cols, gridConfig.gap)}>
                   {images.map((image, index) => {
-                    // Use image's own aspect ratio or fall back to current setting
-                    const imageRatio = image.aspectRatio || aspectRatio;
+                    // Use image's own aspect ratio, default to 1:1 (NOT selector value)
+                    const imageRatio = image.aspectRatio || "1:1";
                     const cssAspectRatio = getAspectRatioCSS(imageRatio);
 
                     return (
