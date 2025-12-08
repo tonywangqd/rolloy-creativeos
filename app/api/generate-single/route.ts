@@ -127,7 +127,9 @@ async function updateImageRecord(
   sessionId: string,
   imageIndex: number,
   storageUrl: string,
-  storagePath: string
+  storagePath: string,
+  aspectRatio: string,
+  resolution: string
 ): Promise<boolean> {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     return false;
@@ -146,6 +148,8 @@ async function updateImageRecord(
         storage_url: storageUrl,
         storage_path: storagePath,
         generated_at: new Date().toISOString(),
+        aspect_ratio: aspectRatio,
+        resolution: resolution,
       })
       .eq('session_id', sessionId)
       .eq('image_index', imageIndex + 1); // image_index is 1-based in DB
@@ -155,7 +159,7 @@ async function updateImageRecord(
       return false;
     }
 
-    console.log(`Updated DB record for session ${sessionId}, image ${imageIndex + 1}`);
+    console.log(`Updated DB record for session ${sessionId}, image ${imageIndex + 1} (${aspectRatio} ${resolution})`);
     return true;
   } catch (error) {
     console.error('Failed to update image record:', error);
@@ -294,7 +298,9 @@ IMPORTANT INSTRUCTIONS:
               sessionId,
               imageIndex,
               storageResult.publicUrl,
-              storageResult.storagePath
+              storageResult.storagePath,
+              aspectRatio,
+              resolution
             );
           }
 
