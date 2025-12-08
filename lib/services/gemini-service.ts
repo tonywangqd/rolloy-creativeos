@@ -139,19 +139,33 @@ Product State: ${productState} (${productState === 'FOLDED' ? 'compact, portable
 function buildUserPrompt(selection: ABCDSelection, productState: ProductState): string {
   const context = buildContextString(selection, productState);
 
+  // Scale instruction based on product state
+  const scaleContext = productState === 'FOLDED'
+    ? `CRITICAL SCALE: The folded walker is COMPACT - only 66cm (26 inches) tall, about knee-height. It can be held with ONE hand, fits in a car trunk. Show it as SMALL relative to the human subject.`
+    : `SCALE: The unfolded walker reaches waist-height of a standing senior. Hands rest comfortably on handles.`;
+
   return `Generate an advertising image prompt for the following scenario:
 
 ${context}
 
+${scaleContext}
+
 Target Audience: Seniors (60-80 years old) and their adult children who value independence, safety, and modern design.
 
-Remember:
+CRITICAL REQUIREMENTS:
 - Focus on lighting, atmosphere, emotion, and human interaction
 - DO NOT describe the walker's physical structure
 - Be specific about time of day and lighting conditions
 - Describe the senior subject in detail (age, expression, clothing)
 - Include environmental details and background elements
 - Match the emotional tone: ${selection.D}
+
+PHOTOREALISM (IMPORTANT - Avoid AI-generated look):
+- Specify camera: "shot on Canon EOS R5, 85mm f/1.4 lens"
+- Natural skin texture with pores, age spots, wrinkles - NOT smooth/plastic
+- Candid expression, genuine emotion - NOT stock photo smile
+- Natural color palette, muted film-like tones - NOT oversaturated
+- Include imperfections: lens flare, dust in light, fabric texture, hair flyaways
 
 Generate the prompt now:`;
 }
