@@ -16,6 +16,7 @@ import {
   RotateCcw,
   Loader2,
   Database,
+  Check,
 } from "lucide-react";
 
 export default function SettingsPage() {
@@ -24,11 +25,14 @@ export default function SettingsPage() {
   const [fluxKey, setFluxKey] = useState("");
   const [referenceUrls, setReferenceUrls] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("");
+  const [originalSystemPrompt, setOriginalSystemPrompt] = useState(""); // Track original value
   const [isDefaultPrompt, setIsDefaultPrompt] = useState(true);
   const [promptUpdatedAt, setPromptUpdatedAt] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [promptSaved, setPromptSaved] = useState(false); // Separate saved state for prompt
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingPrompt, setIsSavingPrompt] = useState(false); // Separate saving state for prompt
   const [isResetting, setIsResetting] = useState(false);
 
   // Load settings on mount
@@ -49,6 +53,7 @@ export default function SettingsPage() {
       const data = await response.json();
       if (data.success) {
         setSystemPrompt(data.data.systemPrompt);
+        setOriginalSystemPrompt(data.data.systemPrompt); // Store original value
         setIsDefaultPrompt(data.data.isDefault);
         setPromptUpdatedAt(data.data.updatedAt);
       }
@@ -62,12 +67,24 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      // Save to localStorage
+      // Save to localStorage (only non-prompt settings)
       localStorage.setItem("gemini_api_key", geminiKey);
       localStorage.setItem("flux_api_key", fluxKey);
       localStorage.setItem("reference_urls", referenceUrls);
 
-      // Save system prompt to API
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (error) {
+      console.error("Failed to save settings:", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Separate function to save system prompt
+  const handleSavePrompt = async () => {
+    setIsSavingPrompt(true);
+    try {
       const response = await fetch("/api/settings/system-prompt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -76,15 +93,16 @@ export default function SettingsPage() {
       const data = await response.json();
 
       if (data.success) {
+        setOriginalSystemPrompt(data.data.systemPrompt); // Update original after save
         setIsDefaultPrompt(data.data.isDefault);
         setPromptUpdatedAt(data.data.updatedAt);
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
+        setPromptSaved(true);
+        setTimeout(() => setPromptSaved(false), 2000);
       }
     } catch (error) {
-      console.error("Failed to save settings:", error);
+      console.error("Failed to save system prompt:", error);
     } finally {
-      setIsSaving(false);
+      setIsSavingPrompt(false);
     }
   };
 
@@ -98,6 +116,7 @@ export default function SettingsPage() {
 
       if (data.success) {
         setSystemPrompt(data.data.systemPrompt);
+        setOriginalSystemPrompt(data.data.systemPrompt); // Update original after reset
         setIsDefaultPrompt(true);
         setPromptUpdatedAt(null);
       }
@@ -118,6 +137,9 @@ export default function SettingsPage() {
       minute: "2-digit",
     });
   };
+
+  // Check if prompt has unsaved changes
+  const hasPromptChanges = systemPrompt !== originalSystemPrompt;
 
   if (isLoading) {
     return (
@@ -200,9 +222,23 @@ export default function SettingsPage() {
                 className="font-mono text-sm"
                 placeholder="Enter your custom system prompt..."
               />
-              <p className="text-xs text-muted-foreground">
-                Tip: The prompt should instruct the AI how to generate image descriptions. Include rules about what to focus on and what to avoid.
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">
+                  Tip: The prompt should instruct the AI how to generate image descriptions. Include rules about what to focus on and what to avoid.
+                </p>
+                <Button
+                  onClick={handleSavePrompt}
+                  disabled={isSavingPrompt || !hasPromptChanges}
+                  size="sm"
+                >
+                  {isSavingPrompt ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="mr-2 h-4 w-4" />
+                  )}
+                  {promptSaved ? "Saved!" : "Confirm"}
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
