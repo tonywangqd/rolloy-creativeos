@@ -1103,6 +1103,52 @@ export default function HomePage() {
                         />
                       </div>
                     </div>
+
+                    {/* Prompt Refinement - Compact version for Generate step */}
+                    <div className="p-3 bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-lg border border-purple-500/20">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Wand2 className="h-3.5 w-3.5 text-purple-500" />
+                        <label className="text-xs font-medium">AI Prompt 微调</label>
+                        <span className="text-[10px] text-muted-foreground">
+                          用自然语言描述你想要的修改
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={refinementInput}
+                          onChange={(e) => setRefinementInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey && refinementInput.trim()) {
+                              e.preventDefault();
+                              handleRefinePrompt();
+                            }
+                          }}
+                          placeholder="例如：我希望这个woman是她自己在做美甲..."
+                          className="flex-1 h-9 px-3 rounded-md border border-input bg-background text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                          disabled={isRefining || !editedPrompt}
+                        />
+                        <Button
+                          size="sm"
+                          onClick={handleRefinePrompt}
+                          disabled={isRefining || !refinementInput.trim() || !editedPrompt}
+                          className="bg-purple-600 hover:bg-purple-700 h-9"
+                        >
+                          {isRefining ? (
+                            <>
+                              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                              <span className="text-xs">微调中...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Send className="mr-1.5 h-3.5 w-3.5" />
+                              <span className="text-xs">微调</span>
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
                     {/* Settings Row */}
                     <div className="flex items-center gap-4">
                       <div className="flex items-center gap-2">
