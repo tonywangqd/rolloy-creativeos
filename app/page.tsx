@@ -23,11 +23,6 @@ interface PromptVersion {
   createdAt: string;
 }
 
-// Scenario-based version storage
-interface ScenarioVersions {
-  [scenarioKey: string]: PromptVersion[];
-}
-
 interface GeneratedImage {
   id: string;
   url: string;
@@ -38,20 +33,12 @@ interface GeneratedImage {
   aspectRatio?: string;
   resolution?: string;
   promptVersion?: number; // Track which version generated this image
-  scenarioKey?: string; // Track which scenario this image belongs to
 }
 
 // LocalStorage keys
-const STORAGE_KEY_SCENARIO_VERSIONS = "rolloy_scenario_versions"; // Map of scenarioKey -> versions
+const STORAGE_KEY_PROMPT_VERSIONS = "rolloy_prompt_versions"; // Current session's versions
 const STORAGE_KEY_IMAGES = "rolloy_generated_images";
-const STORAGE_KEY_CURRENT_SCENARIO = "rolloy_current_scenario";
 const STORAGE_KEY_SESSION_DATA = "rolloy_session_data";
-
-// Generate unique key for ABCD combination (scenario)
-const getScenarioKey = (selection: ABCDSelection): string => {
-  if (!selection) return "";
-  return `${selection.sceneCategory || ""}|${selection.sceneDetail || ""}|${selection.action || ""}|${selection.driver || ""}|${selection.format || ""}`;
-};
 
 export default function HomePage() {
   // Session state
@@ -99,17 +86,10 @@ export default function HomePage() {
   // Prompt translation state
   const [chinesePrompt, setChinesePrompt] = useState("");
 
-  // Prompt version management - per scenario
-  const [allScenarioVersions, setAllScenarioVersions] = useState<ScenarioVersions>({});
-  const [currentScenarioKey, setCurrentScenarioKey] = useState("");
+  // Prompt version management - per session (simple array)
+  const [promptVersions, setPromptVersions] = useState<PromptVersion[]>([]);
   const [currentVersionNumber, setCurrentVersionNumber] = useState(0);
   const [isTranslating, setIsTranslating] = useState(false);
-
-  // Computed: get versions for current scenario
-  const currentScenarioVersions = useMemo(() => {
-    if (!currentScenarioKey) return [];
-    return allScenarioVersions[currentScenarioKey] || [];
-  }, [allScenarioVersions, currentScenarioKey]);
 
   // Use ref to track stop state (avoids stale closure issues)
   const shouldStopRef = useRef(false);
@@ -153,15 +133,17 @@ export default function HomePage() {
       localStorage.removeItem("rolloy_prompt_versions"); // Old global versions key
       localStorage.removeItem("rolloy_current_version"); // Old current version key
 
-      const savedScenarioVersions = localStorage.getItem(STORAGE_KEY_SCENARIO_VERSIONS);
+      // Clean up old localStorage keys
+      localStorage.removeItem("rolloy_scenario_versions");
+      localStorage.removeItem("rolloy_current_scenario");
+
+      const savedVersions = localStorage.getItem(STORAGE_KEY_PROMPT_VERSIONS);
       const savedImages = localStorage.getItem(STORAGE_KEY_IMAGES);
-      const savedCurrentScenario = localStorage.getItem(STORAGE_KEY_CURRENT_SCENARIO);
       const savedSessionData = localStorage.getItem(STORAGE_KEY_SESSION_DATA);
 
-      console.log("Loading persisted data:", { savedScenarioVersions: !!savedScenarioVersions, savedImages: !!savedImages, savedCurrentScenario, savedSessionData: !!savedSessionData });
+      console.log("Loading persisted data:", { savedVersions: !!savedVersions, savedImages: !!savedImages, savedSessionData: !!savedSessionData });
 
       // Restore session data (selection, productState, etc.)
-      let restoredSelection: ABCDSelection | null = null;
       if (savedSessionData) {
         const sessionData = JSON.parse(savedSessionData);
         console.log("Restoring session data:", {
@@ -170,10 +152,7 @@ export default function HomePage() {
           productState: sessionData.productState,
           creativeName: sessionData.creativeName,
         });
-        if (sessionData.selection) {
-          restoredSelection = sessionData.selection;
-          setSelection(sessionData.selection);
-        }
+        if (sessionData.selection) setSelection(sessionData.selection);
         if (sessionData.productState) setProductState(sessionData.productState);
         if (sessionData.referenceImageUrl) setReferenceImageUrl(sessionData.referenceImageUrl);
         if (sessionData.creativeName) setCreativeName(sessionData.creativeName);
@@ -184,25 +163,17 @@ export default function HomePage() {
         console.log("No saved session data found in localStorage");
       }
 
-      // Restore all scenario versions
-      if (savedScenarioVersions) {
-        const scenarioVersions = JSON.parse(savedScenarioVersions) as ScenarioVersions;
-        setAllScenarioVersions(scenarioVersions);
-        console.log("Loaded scenario versions:", Object.keys(scenarioVersions).length, "scenarios");
-      }
-
-      // Restore current scenario key and prompt
-      if (savedCurrentScenario && restoredSelection) {
-        setCurrentScenarioKey(savedCurrentScenario);
-        const scenarioVersions = savedScenarioVersions ? JSON.parse(savedScenarioVersions) as ScenarioVersions : {};
-        const versions = scenarioVersions[savedCurrentScenario] || [];
+      // Restore prompt versions for current session
+      if (savedVersions) {
+        const versions = JSON.parse(savedVersions) as PromptVersion[];
+        setPromptVersions(versions);
+        console.log("Loaded prompt versions:", versions.length);
 
         if (versions.length > 0) {
-          // Find the active version (use savedSessionData.currentVersionNumber or latest)
           const savedVersionNum = savedSessionData ? JSON.parse(savedSessionData).currentVersionNumber : versions.length;
           const currentVersion = versions.find(v => v.version === savedVersionNum) || versions[versions.length - 1];
           if (currentVersion) {
-            console.log("Restoring version:", currentVersion.version, "for scenario:", savedCurrentScenario.substring(0, 30));
+            console.log("Restoring version:", currentVersion.version);
             setEditedPrompt(currentVersion.englishPrompt);
             setPrompt(currentVersion.englishPrompt);
             setChinesePrompt(currentVersion.chinesePrompt || "");
@@ -224,27 +195,16 @@ export default function HomePage() {
     }
   }, []);
 
-  // Persist scenario versions to localStorage
+  // Persist prompt versions to localStorage
   useEffect(() => {
-    if (Object.keys(allScenarioVersions).length > 0) {
+    if (promptVersions.length > 0) {
       try {
-        localStorage.setItem(STORAGE_KEY_SCENARIO_VERSIONS, JSON.stringify(allScenarioVersions));
+        localStorage.setItem(STORAGE_KEY_PROMPT_VERSIONS, JSON.stringify(promptVersions));
       } catch (err) {
-        console.warn("Failed to save scenario versions:", err);
+        console.warn("Failed to save prompt versions:", err);
       }
     }
-  }, [allScenarioVersions]);
-
-  // Persist current scenario key
-  useEffect(() => {
-    if (currentScenarioKey) {
-      try {
-        localStorage.setItem(STORAGE_KEY_CURRENT_SCENARIO, currentScenarioKey);
-      } catch (err) {
-        console.warn("Failed to save current scenario:", err);
-      }
-    }
-  }, [currentScenarioKey]);
+  }, [promptVersions]);
 
   // Persist images to localStorage (only save metadata, not base64 data)
   useEffect(() => {
@@ -617,16 +577,9 @@ export default function HomePage() {
     }
   };
 
-  // Create a new prompt version for the current scenario (IMMEDIATELY, before translation)
+  // Create a new prompt version for current session
   const createPromptVersion = (englishText: string, chineseText: string = ""): number => {
-    // Get or create scenario key based on current selection
-    const scenarioKey = getScenarioKey(selection);
-    if (!scenarioKey) {
-      console.warn("Cannot create version: no scenario key");
-      return 0;
-    }
-    const existingVersions = allScenarioVersions[scenarioKey] || [];
-    const newVersionNumber = existingVersions.length + 1;
+    const newVersionNumber = promptVersions.length + 1;
 
     const newVersion: PromptVersion = {
       id: `v${newVersionNumber}-${Date.now()}`,
@@ -636,34 +589,24 @@ export default function HomePage() {
       createdAt: new Date().toISOString(),
     };
 
-    // Update scenario versions
-    setAllScenarioVersions(prev => ({
-      ...prev,
-      [scenarioKey]: [...(prev[scenarioKey] || []), newVersion],
-    }));
-    setCurrentScenarioKey(scenarioKey);
+    setPromptVersions(prev => [...prev, newVersion]);
     setCurrentVersionNumber(newVersionNumber);
 
-    console.log(`Created version V${newVersionNumber} for scenario: ${scenarioKey.substring(0, 30)}...`);
+    console.log(`Created version V${newVersionNumber}`);
     return newVersionNumber;
   };
 
   // Update Chinese translation for a specific version
   const updateVersionChinesePrompt = (versionNumber: number, chineseText: string) => {
-    const scenarioKey = getScenarioKey(selection);
-    if (!scenarioKey || versionNumber <= 0) return; // Safety check
-    setAllScenarioVersions(prev => {
-      const versions = prev[scenarioKey] || [];
-      const updatedVersions = versions.map(v =>
-        v.version === versionNumber ? { ...v, chinesePrompt: chineseText } : v
-      );
-      return { ...prev, [scenarioKey]: updatedVersions };
-    });
+    if (versionNumber <= 0) return;
+    setPromptVersions(prev =>
+      prev.map(v => v.version === versionNumber ? { ...v, chinesePrompt: chineseText } : v)
+    );
   };
 
-  // Switch to a different prompt version within current scenario
+  // Switch to a different prompt version
   const switchToVersion = (versionNumber: number) => {
-    const version = currentScenarioVersions.find(v => v.version === versionNumber);
+    const version = promptVersions.find(v => v.version === versionNumber);
     if (version) {
       setCurrentVersionNumber(versionNumber);
       setEditedPrompt(version.englishPrompt);
@@ -775,12 +718,8 @@ export default function HomePage() {
         setCreativeName(data.data.creativeName);
         setStep("prompt");
 
-        // Clear previous versions for this scenario - new generation starts from V1
-        const scenarioKey = getScenarioKey(selection);
-        setAllScenarioVersions(prev => ({
-          ...prev,
-          [scenarioKey]: [], // Reset versions for this scenario
-        }));
+        // Clear previous versions - new session starts from V1
+        setPromptVersions([]);
         setCurrentVersionNumber(0);
         setImages([]); // Clear previous images too
 
@@ -833,7 +772,6 @@ export default function HomePage() {
       aspectRatio,
       resolution,
       promptVersion: currentVersionNumber, // Track which version generated this image
-      scenarioKey: currentScenarioKey, // Track which scenario this belongs to
     }));
     setImages(prev => [...prev, ...newPendingImages]);
 
@@ -1239,12 +1177,12 @@ export default function HomePage() {
                 </div>
 
                 {/* Version Selector */}
-                {currentScenarioVersions.length > 0 && (
+                {promptVersions.length > 0 && (
                   <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
                     <History className="h-4 w-4 text-amber-600" />
                     <span className="text-sm font-medium text-amber-700 dark:text-amber-300">Prompt 版本</span>
                     <div className="flex gap-1 flex-wrap">
-                      {currentScenarioVersions.map((v) => (
+                      {promptVersions.map((v) => (
                         <button
                           key={v.id}
                           onClick={() => switchToVersion(v.version)}
@@ -1265,15 +1203,13 @@ export default function HomePage() {
                     <button
                       onClick={() => {
                         if (confirm("确定要清除所有Prompt版本和图片历史吗？此操作不可撤销。")) {
-                          setAllScenarioVersions({});
-                          setCurrentScenarioKey("");
+                          setPromptVersions([]);
                           setImages([]);
                           setCurrentVersionNumber(0);
                           setEditedPrompt("");
                           setPrompt("");
                           setChinesePrompt("");
-                          localStorage.removeItem(STORAGE_KEY_SCENARIO_VERSIONS);
-                          localStorage.removeItem(STORAGE_KEY_CURRENT_SCENARIO);
+                          localStorage.removeItem(STORAGE_KEY_PROMPT_VERSIONS);
                           localStorage.removeItem(STORAGE_KEY_IMAGES);
                           localStorage.removeItem(STORAGE_KEY_SESSION_DATA);
                           setStep("select");
@@ -1452,12 +1388,12 @@ export default function HomePage() {
                 {isPromptPanelOpen && (
                   <CardContent className="space-y-4">
                     {/* Version Selector - Compact for Generate step */}
-                    {currentScenarioVersions.length > 0 && (
+                    {promptVersions.length > 0 && (
                       <div className="flex items-center gap-2 p-2 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
                         <History className="h-3 w-3 text-amber-600" />
                         <span className="text-xs font-medium text-amber-700 dark:text-amber-300">版本</span>
                         <div className="flex gap-1 flex-wrap">
-                          {currentScenarioVersions.map((v) => (
+                          {promptVersions.map((v) => (
                             <button
                               key={v.id}
                               onClick={() => switchToVersion(v.version)}
