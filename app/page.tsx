@@ -164,6 +164,12 @@ export default function HomePage() {
       let restoredSelection: ABCDSelection | null = null;
       if (savedSessionData) {
         const sessionData = JSON.parse(savedSessionData);
+        console.log("Restoring session data:", {
+          hasSelection: !!sessionData.selection,
+          selection: sessionData.selection,
+          productState: sessionData.productState,
+          creativeName: sessionData.creativeName,
+        });
         if (sessionData.selection) {
           restoredSelection = sessionData.selection;
           setSelection(sessionData.selection);
@@ -174,6 +180,8 @@ export default function HomePage() {
         if (sessionData.aspectRatio) setAspectRatio(sessionData.aspectRatio);
         if (sessionData.resolution) setResolution(sessionData.resolution);
         if (sessionData.currentVersionNumber) setCurrentVersionNumber(sessionData.currentVersionNumber);
+      } else {
+        console.log("No saved session data found in localStorage");
       }
 
       // Restore all scenario versions
@@ -306,15 +314,30 @@ export default function HomePage() {
       const sessionName = creativeName || `Creative_${Date.now()}`;
       const sessionPrompt = editedPrompt || prompt;
 
+      console.log("Creating session with:", {
+        sessionName,
+        hasPrompt: !!sessionPrompt,
+        selection,
+        productState,
+      });
+
       if (!sessionPrompt) {
         console.error("Cannot create session: no prompt available");
         setError("请先生成Prompt再生成图片");
         return null;
       }
 
-      if (!selection.sceneCategory || !selection.sceneDetail || !selection.action || !selection.driver || !selection.format) {
-        console.error("Cannot create session: incomplete selection", selection);
-        setError("请先完成ABCD选择");
+      // Check which selection fields are missing
+      const missingFields = [];
+      if (!selection.sceneCategory) missingFields.push("Scene Category");
+      if (!selection.sceneDetail) missingFields.push("Scene Detail");
+      if (!selection.action) missingFields.push("Action");
+      if (!selection.driver) missingFields.push("Driver");
+      if (!selection.format) missingFields.push("Format");
+
+      if (missingFields.length > 0) {
+        console.error("Cannot create session: incomplete selection", { selection, missingFields });
+        setError(`请先完成ABCD选择，缺少: ${missingFields.join(", ")}`);
         return null;
       }
 
