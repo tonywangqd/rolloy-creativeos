@@ -219,37 +219,68 @@ export default function HomePage() {
   // Persist scenario versions to localStorage
   useEffect(() => {
     if (Object.keys(allScenarioVersions).length > 0) {
-      localStorage.setItem(STORAGE_KEY_SCENARIO_VERSIONS, JSON.stringify(allScenarioVersions));
+      try {
+        localStorage.setItem(STORAGE_KEY_SCENARIO_VERSIONS, JSON.stringify(allScenarioVersions));
+      } catch (err) {
+        console.warn("Failed to save scenario versions:", err);
+      }
     }
   }, [allScenarioVersions]);
 
   // Persist current scenario key
   useEffect(() => {
     if (currentScenarioKey) {
-      localStorage.setItem(STORAGE_KEY_CURRENT_SCENARIO, currentScenarioKey);
+      try {
+        localStorage.setItem(STORAGE_KEY_CURRENT_SCENARIO, currentScenarioKey);
+      } catch (err) {
+        console.warn("Failed to save current scenario:", err);
+      }
     }
   }, [currentScenarioKey]);
 
-  // Persist images to localStorage
+  // Persist images to localStorage (only save metadata, not base64 data)
   useEffect(() => {
     if (images.length > 0) {
-      localStorage.setItem(STORAGE_KEY_IMAGES, JSON.stringify(images));
+      try {
+        // Only save images that have been uploaded to cloud storage
+        // Exclude large base64 URLs to avoid quota exceeded errors
+        const imagesToSave = images
+          .filter(img => img.storageUrl) // Only save images with cloud URLs
+          .map(img => ({
+            ...img,
+            url: img.storageUrl || "", // Use storageUrl instead of base64
+          }));
+
+        if (imagesToSave.length > 0) {
+          localStorage.setItem(STORAGE_KEY_IMAGES, JSON.stringify(imagesToSave));
+        }
+      } catch (err) {
+        console.warn("Failed to save images to localStorage:", err);
+        // If quota exceeded, clear old images
+        if (err instanceof Error && err.name === "QuotaExceededError") {
+          localStorage.removeItem(STORAGE_KEY_IMAGES);
+        }
+      }
     }
   }, [images]);
 
   // Persist session data (selection, productState, currentVersionNumber, etc.)
   useEffect(() => {
     if (selection.sceneCategory || productState || creativeName) {
-      const sessionData = {
-        selection,
-        productState,
-        referenceImageUrl,
-        creativeName,
-        aspectRatio,
-        resolution,
-        currentVersionNumber,
-      };
-      localStorage.setItem(STORAGE_KEY_SESSION_DATA, JSON.stringify(sessionData));
+      try {
+        const sessionData = {
+          selection,
+          productState,
+          referenceImageUrl,
+          creativeName,
+          aspectRatio,
+          resolution,
+          currentVersionNumber,
+        };
+        localStorage.setItem(STORAGE_KEY_SESSION_DATA, JSON.stringify(sessionData));
+      } catch (err) {
+        console.warn("Failed to save session data:", err);
+      }
     }
   }, [selection, productState, referenceImageUrl, creativeName, aspectRatio, resolution, currentVersionNumber]);
 
