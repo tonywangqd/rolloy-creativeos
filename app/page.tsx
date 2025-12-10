@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef, useTransition, useMemo, memo } from "react";
-import { Sparkles, Eye, ImageIcon, RefreshCw, Copy, Check, Loader2, StopCircle, Cloud, Play, Pause, Star, Plus, Download, ZoomIn, Trash2, ChevronDown, ChevronUp, Pencil, Wand2, Send, Languages } from "lucide-react";
+import { Sparkles, Eye, ImageIcon, RefreshCw, Copy, Check, Loader2, StopCircle, Cloud, Play, Pause, Star, Plus, Download, ZoomIn, Trash2, ChevronDown, ChevronUp, Pencil, Wand2, Send, Languages, History, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,6 +14,15 @@ import { cn } from "@/lib/utils";
 
 type WorkflowStep = "select" | "prompt" | "generate";
 
+// Prompt Version for tracking history
+interface PromptVersion {
+  id: string;
+  version: number;
+  englishPrompt: string;
+  chinesePrompt: string;
+  createdAt: string;
+}
+
 interface GeneratedImage {
   id: string;
   url: string;
@@ -23,7 +32,13 @@ interface GeneratedImage {
   status: "pending" | "generating" | "success" | "failed";
   aspectRatio?: string;
   resolution?: string;
+  promptVersion?: number; // Track which version generated this image
 }
+
+// LocalStorage keys
+const STORAGE_KEY_VERSIONS = "rolloy_prompt_versions";
+const STORAGE_KEY_IMAGES = "rolloy_generated_images";
+const STORAGE_KEY_CURRENT_VERSION = "rolloy_current_version";
 
 export default function HomePage() {
   // Session state
@@ -70,6 +85,10 @@ export default function HomePage() {
 
   // Prompt translation state
   const [chinesePrompt, setChinesePrompt] = useState("");
+
+  // Prompt version management
+  const [promptVersions, setPromptVersions] = useState<PromptVersion[]>([]);
+  const [currentVersionNumber, setCurrentVersionNumber] = useState(0);
   const [isTranslating, setIsTranslating] = useState(false);
 
   // Use ref to track stop state (avoids stale closure issues)
@@ -106,6 +125,66 @@ export default function HomePage() {
   useEffect(() => {
     loadSessions();
   }, []);
+
+  // Load persisted data from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedVersions = localStorage.getItem(STORAGE_KEY_VERSIONS);
+      const savedImages = localStorage.getItem(STORAGE_KEY_IMAGES);
+      const savedCurrentVersion = localStorage.getItem(STORAGE_KEY_CURRENT_VERSION);
+
+      if (savedVersions) {
+        const versions = JSON.parse(savedVersions) as PromptVersion[];
+        setPromptVersions(versions);
+
+        // Restore current version's prompt
+        if (savedCurrentVersion) {
+          const versionNum = parseInt(savedCurrentVersion);
+          setCurrentVersionNumber(versionNum);
+          const currentVersion = versions.find(v => v.version === versionNum);
+          if (currentVersion) {
+            setEditedPrompt(currentVersion.englishPrompt);
+            setPrompt(currentVersion.englishPrompt);
+            setChinesePrompt(currentVersion.chinesePrompt);
+            if (versions.length > 0) {
+              setStep("prompt");
+            }
+          }
+        }
+      }
+
+      if (savedImages) {
+        const imgs = JSON.parse(savedImages) as GeneratedImage[];
+        setImages(imgs);
+        if (imgs.length > 0) {
+          setStep("generate");
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load persisted data:", err);
+    }
+  }, []);
+
+  // Persist versions to localStorage
+  useEffect(() => {
+    if (promptVersions.length > 0) {
+      localStorage.setItem(STORAGE_KEY_VERSIONS, JSON.stringify(promptVersions));
+    }
+  }, [promptVersions]);
+
+  // Persist images to localStorage
+  useEffect(() => {
+    if (images.length > 0) {
+      localStorage.setItem(STORAGE_KEY_IMAGES, JSON.stringify(images));
+    }
+  }, [images]);
+
+  // Persist current version number
+  useEffect(() => {
+    if (currentVersionNumber > 0) {
+      localStorage.setItem(STORAGE_KEY_CURRENT_VERSION, currentVersionNumber.toString());
+    }
+  }, [currentVersionNumber]);
 
   const loadSessions = async () => {
     try {
@@ -398,8 +477,34 @@ export default function HomePage() {
     }
   };
 
-  // Background translation helper (doesn't block UI)
-  const translatePromptInBackground = async (promptText: string) => {
+  // Create a new prompt version
+  const createPromptVersion = (englishPrompt: string, chinesePrompt: string): number => {
+    const newVersionNumber = promptVersions.length + 1;
+    const newVersion: PromptVersion = {
+      id: `v${newVersionNumber}-${Date.now()}`,
+      version: newVersionNumber,
+      englishPrompt,
+      chinesePrompt,
+      createdAt: new Date().toISOString(),
+    };
+    setPromptVersions(prev => [...prev, newVersion]);
+    setCurrentVersionNumber(newVersionNumber);
+    return newVersionNumber;
+  };
+
+  // Switch to a different prompt version
+  const switchToVersion = (versionNumber: number) => {
+    const version = promptVersions.find(v => v.version === versionNumber);
+    if (version) {
+      setCurrentVersionNumber(versionNumber);
+      setEditedPrompt(version.englishPrompt);
+      setPrompt(version.englishPrompt);
+      setChinesePrompt(version.chinesePrompt);
+    }
+  };
+
+  // Background translation helper - also creates version
+  const translatePromptInBackground = async (promptText: string, isNewVersion: boolean = true) => {
     setIsTranslating(true);
     setChinesePrompt(""); // Clear old translation
     try {
@@ -410,10 +515,19 @@ export default function HomePage() {
       });
       const data = await response.json();
       if (data.success) {
-        setChinesePrompt(data.data.translatedPrompt);
+        const translatedText = data.data.translatedPrompt;
+        setChinesePrompt(translatedText);
+        // Create a new version with both English and Chinese
+        if (isNewVersion) {
+          createPromptVersion(promptText, translatedText);
+        }
       }
     } catch (err) {
       console.error("Background translation failed:", err);
+      // Still create version even if translation fails
+      if (isNewVersion) {
+        createPromptVersion(promptText, "");
+      }
     } finally {
       setIsTranslating(false);
     }
@@ -534,9 +648,9 @@ export default function HomePage() {
       await updateSessionStatus(activeSessionId, "in_progress");
     }
 
-    // Add pending images for this batch (with current settings)
+    // Add pending images for this batch (with current settings and version)
     const newPendingImages: GeneratedImage[] = Array.from({ length: BATCH_SIZE }, (_, i) => ({
-      id: `img-${startIndex + i + 1}`,
+      id: `img-${startIndex + i + 1}-${Date.now()}`,
       url: "",
       storageUrl: null,
       selected: false,
@@ -544,6 +658,7 @@ export default function HomePage() {
       status: "pending" as const,
       aspectRatio,
       resolution,
+      promptVersion: currentVersionNumber, // Track which version generated this image
     }));
     setImages(prev => [...prev, ...newPendingImages]);
 
@@ -948,12 +1063,64 @@ export default function HomePage() {
                   </div>
                 </div>
 
+                {/* Version Selector */}
+                {promptVersions.length > 0 && (
+                  <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
+                    <History className="h-4 w-4 text-amber-600" />
+                    <span className="text-sm font-medium text-amber-700 dark:text-amber-300">Prompt 版本</span>
+                    <div className="flex gap-1 flex-wrap">
+                      {promptVersions.map((v) => (
+                        <button
+                          key={v.id}
+                          onClick={() => switchToVersion(v.version)}
+                          className={cn(
+                            "px-3 py-1 rounded-full text-xs font-medium transition-all",
+                            currentVersionNumber === v.version
+                              ? "bg-amber-600 text-white"
+                              : "bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-800"
+                          )}
+                        >
+                          V{v.version}
+                        </button>
+                      ))}
+                    </div>
+                    <span className="text-xs text-muted-foreground ml-auto">
+                      当前: V{currentVersionNumber}
+                    </span>
+                    <button
+                      onClick={() => {
+                        if (confirm("确定要清除所有Prompt版本和图片历史吗？此操作不可撤销。")) {
+                          setPromptVersions([]);
+                          setImages([]);
+                          setCurrentVersionNumber(0);
+                          setEditedPrompt("");
+                          setPrompt("");
+                          setChinesePrompt("");
+                          localStorage.removeItem(STORAGE_KEY_VERSIONS);
+                          localStorage.removeItem(STORAGE_KEY_IMAGES);
+                          localStorage.removeItem(STORAGE_KEY_CURRENT_VERSION);
+                          setStep("select");
+                        }
+                      }}
+                      className="p-1.5 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 transition-colors"
+                      title="清除所有历史"
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+
                 {/* English and Chinese Prompt Side by Side */}
                 <div className="grid grid-cols-2 gap-4">
                   {/* English Prompt (Editable) */}
                   <div>
-                    <label className="text-sm font-medium mb-2 block">
+                    <label className="text-sm font-medium mb-2 block flex items-center gap-2">
                       English Prompt (可编辑)
+                      {currentVersionNumber > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">
+                          V{currentVersionNumber}
+                        </span>
+                      )}
                     </label>
                     <Textarea
                       value={editedPrompt}
@@ -1336,6 +1503,12 @@ export default function HomePage() {
                               className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                               onClick={() => toggleImageSelection(image.id)}
                             />
+                            {/* Version badge - always visible */}
+                            {image.promptVersion && (
+                              <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white shadow-md z-10">
+                                V{image.promptVersion}
+                              </div>
+                            )}
                             {/* Gradient overlay for better text visibility */}
                             <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
                             {/* Action buttons on hover */}
