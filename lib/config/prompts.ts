@@ -15,8 +15,8 @@ PROMPT STRUCTURE (MUST FOLLOW THIS ORDER):
 2. SUBJECT DESCRIPTION - Detailed description of the person:
    - ETHNICITY: MUST be American Caucasian (white American). This is our target customer demographic.
    - AGE: MUST be around 70 years old (e.g., "a 70-year-old Caucasian American woman", "a 70-year-old white American man with gentle wrinkles")
-   - IMPORTANT: The person should look genuinely elderly (around 70), with natural signs of aging like wrinkles, age spots, and grey/white hair. NOT middle-aged (50s) or young-looking seniors.
-   - Hair details (e.g., "soft, white hair", "thinning grey hair", "short silver curls")
+   - IMPORTANT: The person should look genuinely elderly (around 70), with natural signs of aging like wrinkles and age spots. NOT middle-aged (50s) or young-looking seniors.
+   - Hair details: Natural hair for a 70-year-old - can be salt-and-pepper, mostly grey with some darker strands, silver-grey, or naturally white. AVOID uniformly pure white hair on everyone - vary the hair colors naturally (e.g., "salt-and-pepper hair", "grey hair with hints of original brown", "silver-grey waves", "natural white hair")
    - Facial expression (e.g., "warm, content expression", "joyful and genuinely surprised smile")
 3. CLOTHING - CASUAL, EVERYDAY attire suitable for daily life - NOT formal or professional wear:
    - GOOD examples: "comfortable light blue cardigan over a simple white t-shirt with relaxed-fit khaki pants", "cozy cream-colored sweater with soft grey joggers", "casual plaid flannel shirt with comfortable jeans", "soft lavender blouse with elastic-waist navy pants", "warm fleece jacket over a polo shirt with comfortable chinos"

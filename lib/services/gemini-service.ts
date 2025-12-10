@@ -219,8 +219,8 @@ REQUIRED PROMPT ELEMENTS (follow this structure):
 2. SUBJECT: Describe the person in detail:
    - ETHNICITY: MUST be American Caucasian (white American) - this is our target customer
    - Age MUST be around 70 years old (e.g., "a 70-year-old Caucasian American woman", "a 70-year-old white American man")
-   - The person should look genuinely elderly with natural signs of aging (wrinkles, grey/white hair)
-   - Hair: soft white hair, thinning grey hair, or short silver curls
+   - The person should look genuinely elderly with natural signs of aging (wrinkles, age spots)
+   - Hair: Natural hair for 70-year-old - salt-and-pepper, grey with hints of original color, silver-grey, or natural white. Vary the colors, NOT always pure white.
    - Expression: genuine warm emotion (e.g., "content expression", "joyful smile")
 3. CLOTHING: CASUAL, EVERYDAY attire - NOT formal or business wear:
    - GOOD: comfortable cardigan, cozy sweater, casual flannel shirt, soft blouse, fleece jacket, polo shirt

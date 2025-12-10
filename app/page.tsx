@@ -539,8 +539,8 @@ export default function HomePage() {
     }
   };
 
-  // Create a new prompt version for the current scenario
-  const createPromptVersion = (englishText: string, chineseText: string): number => {
+  // Create a new prompt version for the current scenario (IMMEDIATELY, before translation)
+  const createPromptVersion = (englishText: string, chineseText: string = ""): number => {
     // Get or create scenario key based on current selection
     const scenarioKey = getScenarioKey(selection);
     const existingVersions = allScenarioVersions[scenarioKey] || [];
@@ -562,8 +562,20 @@ export default function HomePage() {
     setCurrentScenarioKey(scenarioKey);
     setCurrentVersionNumber(newVersionNumber);
 
-    console.log(`Created version V${newVersionNumber} for scenario: ${scenarioKey.substring(0, 30)}... with Chinese: ${chineseText ? 'Yes' : 'No'}`);
+    console.log(`Created version V${newVersionNumber} for scenario: ${scenarioKey.substring(0, 30)}...`);
     return newVersionNumber;
+  };
+
+  // Update Chinese translation for a specific version
+  const updateVersionChinesePrompt = (versionNumber: number, chineseText: string) => {
+    const scenarioKey = getScenarioKey(selection);
+    setAllScenarioVersions(prev => {
+      const versions = prev[scenarioKey] || [];
+      const updatedVersions = versions.map(v =>
+        v.version === versionNumber ? { ...v, chinesePrompt: chineseText } : v
+      );
+      return { ...prev, [scenarioKey]: updatedVersions };
+    });
   };
 
   // Switch to a different prompt version within current scenario
@@ -577,8 +589,8 @@ export default function HomePage() {
     }
   };
 
-  // Background translation helper - also creates version
-  const translatePromptInBackground = async (promptText: string, isNewVersion: boolean = true) => {
+  // Background translation helper - updates existing version's Chinese translation
+  const translatePromptInBackground = async (promptText: string, versionNumber: number) => {
     setIsTranslating(true);
     setChinesePrompt(""); // Clear old translation
     try {
@@ -591,17 +603,11 @@ export default function HomePage() {
       if (data.success) {
         const translatedText = data.data.translatedPrompt;
         setChinesePrompt(translatedText);
-        // Create a new version with both English and Chinese
-        if (isNewVersion) {
-          createPromptVersion(promptText, translatedText);
-        }
+        // Update the version's Chinese translation
+        updateVersionChinesePrompt(versionNumber, translatedText);
       }
     } catch (err) {
       console.error("Background translation failed:", err);
-      // Still create version even if translation fails
-      if (isNewVersion) {
-        createPromptVersion(promptText, "");
-      }
     } finally {
       setIsTranslating(false);
     }
@@ -634,8 +640,9 @@ export default function HomePage() {
         setPrompt(refinedPrompt);
         setEditedPrompt(refinedPrompt);
         setRefinementInput(""); // Clear input after success
-        // Auto-translate the refined prompt
-        translatePromptInBackground(refinedPrompt);
+        // Create version FIRST (immediately), then translate in background
+        const newVersionNumber = createPromptVersion(refinedPrompt);
+        translatePromptInBackground(refinedPrompt, newVersionNumber);
       } else {
         setError(data.error?.message || "Failed to refine prompt");
       }
@@ -685,8 +692,9 @@ export default function HomePage() {
         setCreativeName(data.data.creativeName);
         setStep("prompt");
 
-        // Auto-translate to Chinese in the background
-        translatePromptInBackground(generatedPrompt);
+        // Create version FIRST (immediately), then translate in background
+        const newVersionNumber = createPromptVersion(generatedPrompt);
+        translatePromptInBackground(generatedPrompt, newVersionNumber);
       } else {
         setError(data.error?.message || "Failed to generate prompt");
       }
