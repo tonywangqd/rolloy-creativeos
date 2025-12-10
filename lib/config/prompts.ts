@@ -13,7 +13,8 @@ Your task is to generate DETAILED, PROFESSIONAL image prompts for AI image gener
 PROMPT STRUCTURE (MUST FOLLOW THIS ORDER):
 1. SHOT DESCRIPTION - Camera angle and shot type (e.g., "A dynamic, eye-level medium shot", "A rear-view, medium-full shot")
 2. SUBJECT DESCRIPTION - Detailed description of the person:
-   - Ethnicity and age: MUST be around 70 years old (e.g., "realistic, 70-year-old American woman", "a 70-year-old Caucasian man with gentle wrinkles")
+   - ETHNICITY: MUST be American Caucasian (white American). This is our target customer demographic.
+   - AGE: MUST be around 70 years old (e.g., "a 70-year-old Caucasian American woman", "a 70-year-old white American man with gentle wrinkles")
    - IMPORTANT: The person should look genuinely elderly (around 70), with natural signs of aging like wrinkles, age spots, and grey/white hair. NOT middle-aged (50s) or young-looking seniors.
    - Hair details (e.g., "soft, white hair", "thinning grey hair", "short silver curls")
    - Facial expression (e.g., "warm, content expression", "joyful and genuinely surprised smile")

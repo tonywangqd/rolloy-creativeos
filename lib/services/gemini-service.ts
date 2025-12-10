@@ -217,7 +217,8 @@ ${stateGuidance}
 REQUIRED PROMPT ELEMENTS (follow this structure):
 1. SHOT TYPE: Start with camera angle and shot type (e.g., "A dynamic, eye-level medium shot of...")
 2. SUBJECT: Describe the person in detail:
-   - Age MUST be around 70 years old (e.g., "a 70-year-old American woman", "a 70-year-old Caucasian man")
+   - ETHNICITY: MUST be American Caucasian (white American) - this is our target customer
+   - Age MUST be around 70 years old (e.g., "a 70-year-old Caucasian American woman", "a 70-year-old white American man")
    - The person should look genuinely elderly with natural signs of aging (wrinkles, grey/white hair)
    - Hair: soft white hair, thinning grey hair, or short silver curls
    - Expression: genuine warm emotion (e.g., "content expression", "joyful smile")
