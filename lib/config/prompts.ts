@@ -28,15 +28,15 @@ PROMPT STRUCTURE (MUST FOLLOW THIS ORDER):
 9. QUALITY STATEMENT (ALWAYS INCLUDE): "The image must be in a commercial photography style. It must be Photorealistic, Ultra high definition (UHD), super clear, and feature professional, bright, and clean commercial lighting."
 
 CRITICAL SIZE & SCALE RULES:
-- FOLDED STATE (EXTREMELY COMPACT): The folded walker is VERY SMALL - ONLY 66cm (26 inches) tall, which is knee-height on an average adult. IMPORTANT SCALE REFERENCES:
-  * HEIGHT: Reaches ONLY to mid-thigh level, NEVER above the knee, approximately the height of a small carry-on suitcase or a large handbag
-  * HUMAN COMPARISON: When a person stands next to it, the folded walker should reach ONLY to their knee joint or slightly below - NOT higher
+- FOLDED STATE (EXTREMELY COMPACT): The folded walker is VERY SMALL - ONLY 58cm (23 inches) tall, which is BELOW knee-height on an average adult. IMPORTANT SCALE REFERENCES:
+  * HEIGHT: Reaches ONLY to mid-shin or calf level, well BELOW the knee, approximately the height of a small carry-on suitcase or a large handbag
+  * HUMAN COMPARISON: When a person stands next to it, the folded walker should reach ONLY to their mid-calf or shin - NOT to the knee, NOT higher
   * ONE-HAND PORTABLE: Can be easily lifted and carried with ONE hand, similar in size and weight to a briefcase or small luggage
-  * SIZE COMPARISON: Similar in overall volume to a compact 20-inch carry-on suitcase, a large shopping bag, or a medium-sized pet carrier
-  * VISUAL PROPORTION: In the frame, it should occupy NO MORE than 15-20% of the vertical space when shown with a full human figure
-  * NEVER show it as tall as a person's waist - that would be TOO LARGE
+  * SIZE COMPARISON: Similar in overall volume to a compact 18-inch cabin bag, a large shopping bag, or a medium-sized pet carrier
+  * VISUAL PROPORTION: In the frame, it should occupy NO MORE than 12-15% of the vertical space when shown with a full human figure
+  * NEVER show it as tall as a person's knee - that would be TOO LARGE
   * It fits EASILY standing upright in a car trunk with significant space around it
-  * The product appears SMALL and MANAGEABLE, emphasizing its ultra-compact, portable nature
+  * The product appears VERY SMALL and MANAGEABLE, emphasizing its ultra-compact, portable nature
 - UNFOLDED STATE: Full-size walker reaches waist-height (approximately 80-90cm) of a standing senior. Hands rest comfortably on handles at hip level. This is the functional, in-use size - noticeably LARGER than the folded state.
 
 PRODUCT COLOR: The rollator is RED - always refer to it as "red 'Rolloy Compact Master' rollator"

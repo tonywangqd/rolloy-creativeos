@@ -189,15 +189,15 @@ function buildUserPrompt(
   // Scale and action guidance based on product state
   const stateGuidance = productState === 'FOLDED'
     ? `FOLDED WALKER GUIDANCE (CRITICAL - EXTREMELY COMPACT SIZE):
-- The folded walker is VERY SMALL - ONLY 66cm (26 inches) tall, which is KNEE-HEIGHT on an average adult
-- SCALE EMPHASIS: It reaches ONLY to the person's mid-thigh or knee level - NEVER to waist level
-- SIZE COMPARISON: Similar to a compact 20-inch carry-on suitcase, a large shopping bag, or a briefcase - NOT a full-size suitcase
+- The folded walker is VERY SMALL - ONLY 58cm (23 inches) tall, which is BELOW KNEE-HEIGHT on an average adult
+- SCALE EMPHASIS: It reaches ONLY to the person's mid-shin or calf level - NEVER to knee level, NEVER to waist level
+- SIZE COMPARISON: Similar to a compact 18-inch cabin bag, a large shopping bag, or a briefcase - NOT a full-size suitcase
 - PORTABILITY: Easily lifted and carried with ONE hand, showing it is lightweight and manageable
-- HUMAN PROPORTION: When shown with a person, the folded walker should be approximately 1/3 or less of the person's standing height
-- NEGATIVE CONSTRAINTS: It should NOT appear as large as a chair, NOT reach waist-height, NOT require two hands to lift
-- VISUAL EXAMPLES: Show it being effortlessly lifted from ground with one hand, placed standing upright in a car trunk with plenty of space around it, carried like a briefcase or small luggage, or standing next to a person reaching only to their knee
+- HUMAN PROPORTION: When shown with a person, the folded walker should be approximately 1/4 to 1/3 of the person's standing height
+- NEGATIVE CONSTRAINTS: It should NOT appear as large as a chair, NOT reach knee-height, NOT require two hands to lift
+- VISUAL EXAMPLES: Show it being effortlessly lifted from ground with one hand, placed standing upright in a car trunk with plenty of space around it, carried like a briefcase or small luggage, or standing next to a person reaching only to their mid-calf
 - THE KEY MESSAGE: This is an ultra-compact, highly portable device that is surprisingly small when folded
-- Example actions: one-handed lifting from ground, placing easily in trunk, unboxing to reveal its compact size, carrying casually to car, standing next to it while it reaches only knee-height`
+- Example actions: one-handed lifting from ground, placing easily in trunk, unboxing to reveal its compact size, carrying casually to car, standing next to it while it reaches only mid-shin height`
     : `UNFOLDED WALKER GUIDANCE:
 - The walker reaches waist-height (approximately 80-90cm) of a standing senior
 - Senior's hands rest comfortably on the handles at hip level
