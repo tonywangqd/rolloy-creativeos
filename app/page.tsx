@@ -302,11 +302,27 @@ export default function HomePage() {
   // Create a new session
   const createSession = async (totalImages: number): Promise<string | null> => {
     try {
+      // Validate required fields before making request
+      const sessionName = creativeName || `Creative_${Date.now()}`;
+      const sessionPrompt = editedPrompt || prompt;
+
+      if (!sessionPrompt) {
+        console.error("Cannot create session: no prompt available");
+        setError("请先生成Prompt再生成图片");
+        return null;
+      }
+
+      if (!selection.sceneCategory || !selection.sceneDetail || !selection.action || !selection.driver || !selection.format) {
+        console.error("Cannot create session: incomplete selection", selection);
+        setError("请先完成ABCD选择");
+        return null;
+      }
+
       const response = await fetch("/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          creative_name: creativeName,
+          creative_name: sessionName,
           abcd_selection: {
             A1: selection.sceneCategory,
             A2: selection.sceneDetail,
@@ -314,8 +330,8 @@ export default function HomePage() {
             C: selection.driver,
             D: selection.format,
           },
-          prompt: editedPrompt,
-          product_state: productState,
+          prompt: sessionPrompt,
+          product_state: productState || "UNFOLDED",
           reference_image_url: referenceImageUrl,
           total_images: totalImages,
         }),
@@ -326,6 +342,9 @@ export default function HomePage() {
         setCurrentSessionId(data.data.session.id);
         await loadSessions();
         return data.data.session.id;
+      } else {
+        console.error("Session creation failed:", data.error);
+        setError(data.error?.message || "创建会话失败");
       }
       return null;
     } catch (err) {
