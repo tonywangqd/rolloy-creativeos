@@ -217,10 +217,14 @@ ${stateGuidance}
 REQUIRED PROMPT ELEMENTS (follow this structure):
 1. SHOT TYPE: Start with camera angle and shot type (e.g., "A dynamic, eye-level medium shot of...")
 2. SUBJECT: Describe the person in detail:
-   - "realistic, older American [man/woman]"
-   - Hair: specific style and color (e.g., "stylish, short silver hair", "soft, chin-length gray hair")
-   - Expression: genuine emotion (e.g., "pleasant, capable expression", "joyful and genuinely surprised smile")
-3. CLOTHING: Specific outfit with colors and materials (e.g., "clean, white linen button-down shirt and classic beige khaki pants")
+   - Age MUST be around 70 years old (e.g., "a 70-year-old American woman", "a 70-year-old Caucasian man")
+   - The person should look genuinely elderly with natural signs of aging (wrinkles, grey/white hair)
+   - Hair: soft white hair, thinning grey hair, or short silver curls
+   - Expression: genuine warm emotion (e.g., "content expression", "joyful smile")
+3. CLOTHING: CASUAL, EVERYDAY attire - NOT formal or business wear:
+   - GOOD: comfortable cardigan, cozy sweater, casual flannel shirt, soft blouse, fleece jacket, polo shirt
+   - AVOID: suits, blazers, formal shirts, ties, business attire
+   - Example: "comfortable light blue cardigan over a simple white t-shirt with relaxed khaki pants"
 4. ACTION: What the person is doing with the red 'Rolloy Compact Master' rollator
 5. ENVIRONMENT: Detailed scene with:
    - Location (living room, park, driveway, etc.)

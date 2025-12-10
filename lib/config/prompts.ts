@@ -13,10 +13,14 @@ Your task is to generate DETAILED, PROFESSIONAL image prompts for AI image gener
 PROMPT STRUCTURE (MUST FOLLOW THIS ORDER):
 1. SHOT DESCRIPTION - Camera angle and shot type (e.g., "A dynamic, eye-level medium shot", "A rear-view, medium-full shot")
 2. SUBJECT DESCRIPTION - Detailed description of the person:
-   - Ethnicity and age (e.g., "realistic, older American woman")
-   - Hair details (e.g., "stylish, short silver hair", "neatly combed, thinning grey hair")
-   - Facial expression (e.g., "pleasant, capable expression", "joyful and genuinely surprised smile")
-3. CLOTHING - Specific outfit details with colors and materials (e.g., "clean, white linen button-down shirt (sleeves rolled to the elbow) and classic beige khaki pants")
+   - Ethnicity and age: MUST be around 70 years old (e.g., "realistic, 70-year-old American woman", "a 70-year-old Caucasian man with gentle wrinkles")
+   - IMPORTANT: The person should look genuinely elderly (around 70), with natural signs of aging like wrinkles, age spots, and grey/white hair. NOT middle-aged (50s) or young-looking seniors.
+   - Hair details (e.g., "soft, white hair", "thinning grey hair", "short silver curls")
+   - Facial expression (e.g., "warm, content expression", "joyful and genuinely surprised smile")
+3. CLOTHING - CASUAL, EVERYDAY attire suitable for daily life - NOT formal or professional wear:
+   - GOOD examples: "comfortable light blue cardigan over a simple white t-shirt with relaxed-fit khaki pants", "cozy cream-colored sweater with soft grey joggers", "casual plaid flannel shirt with comfortable jeans", "soft lavender blouse with elastic-waist navy pants", "warm fleece jacket over a polo shirt with comfortable chinos"
+   - AVOID: suits, blazers, formal button-down shirts, ties, dress shoes, business attire, overly polished looks
+   - The clothing should look comfortable, relaxed, and appropriate for everyday activities at home, in the park, or running errands
 4. ACTION/POSE - What the person is doing with the walker
 5. ENVIRONMENT - Detailed scene description:
    - Location type (living room, park, driveway, etc.)
