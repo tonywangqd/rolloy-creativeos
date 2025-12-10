@@ -1279,6 +1279,32 @@ export default function HomePage() {
                 </CardHeader>
                 {isPromptPanelOpen && (
                   <CardContent className="space-y-4">
+                    {/* Version Selector - Compact for Generate step */}
+                    {promptVersions.length > 0 && (
+                      <div className="flex items-center gap-2 p-2 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
+                        <History className="h-3 w-3 text-amber-600" />
+                        <span className="text-xs font-medium text-amber-700 dark:text-amber-300">版本</span>
+                        <div className="flex gap-1 flex-wrap">
+                          {promptVersions.map((v) => (
+                            <button
+                              key={v.id}
+                              onClick={() => switchToVersion(v.version)}
+                              className={cn(
+                                "px-2 py-0.5 rounded-full text-[10px] font-medium transition-all",
+                                currentVersionNumber === v.version
+                                  ? "bg-amber-600 text-white"
+                                  : "bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-800"
+                              )}
+                            >
+                              V{v.version}
+                            </button>
+                          ))}
+                        </div>
+                        <span className="text-[10px] text-muted-foreground ml-auto">
+                          当前: V{currentVersionNumber}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex gap-4">
                       {/* Reference Image + State Selector */}
                       <div className="flex-shrink-0 space-y-2">
