@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef, useTransition, useMemo, memo } from "react";
-import { Sparkles, Eye, ImageIcon, RefreshCw, Copy, Check, Loader2, StopCircle, Cloud, Play, Pause, Star, Plus, Download, ZoomIn, Trash2, ChevronDown, ChevronUp, Pencil } from "lucide-react";
+import { Sparkles, Eye, ImageIcon, RefreshCw, Copy, Check, Loader2, StopCircle, Cloud, Play, Pause, Star, Plus, Download, ZoomIn, Trash2, ChevronDown, ChevronUp, Pencil, Wand2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -63,6 +63,10 @@ export default function HomePage() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+
+  // Prompt refinement state
+  const [refinementInput, setRefinementInput] = useState("");
+  const [isRefining, setIsRefining] = useState(false);
 
   // Use ref to track stop state (avoids stale closure issues)
   const shouldStopRef = useRef(false);
@@ -387,6 +391,43 @@ export default function HomePage() {
       } finally {
         setIsGeneratingPrompt(false);
       }
+    }
+  };
+
+  // Handle Prompt Refinement
+  const handleRefinePrompt = async () => {
+    if (!refinementInput.trim() || !editedPrompt) {
+      return;
+    }
+
+    setIsRefining(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/refine-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          originalPrompt: editedPrompt,
+          refinementInstruction: refinementInput.trim(),
+          productState,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setPrompt(data.data.refinedPrompt);
+        setEditedPrompt(data.data.refinedPrompt);
+        setRefinementInput(""); // Clear input after success
+      } else {
+        setError(data.error?.message || "Failed to refine prompt");
+      }
+    } catch (err) {
+      setError("Network error. Please try again.");
+      console.error(err);
+    } finally {
+      setIsRefining(false);
     }
   };
 
@@ -886,6 +927,50 @@ export default function HomePage() {
                     className="font-mono text-sm"
                     placeholder="Edit the prompt here..."
                   />
+                </div>
+
+                {/* Prompt Refinement */}
+                <div className="p-4 bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-lg border border-purple-500/20">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Wand2 className="h-4 w-4 text-purple-500" />
+                    <label className="text-sm font-medium">AI Prompt 微调</label>
+                    <span className="text-xs text-muted-foreground">
+                      用自然语言描述你想要的修改，AI会帮你调整Prompt
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={refinementInput}
+                      onChange={(e) => setRefinementInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey && refinementInput.trim()) {
+                          e.preventDefault();
+                          handleRefinePrompt();
+                        }
+                      }}
+                      placeholder="例如：我希望这个woman是她自己在做美甲..."
+                      className="flex-1 h-10 px-3 rounded-md border border-input bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                      disabled={isRefining || !editedPrompt}
+                    />
+                    <Button
+                      onClick={handleRefinePrompt}
+                      disabled={isRefining || !refinementInput.trim() || !editedPrompt}
+                      className="bg-purple-600 hover:bg-purple-700"
+                    >
+                      {isRefining ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          微调中...
+                        </>
+                      ) : (
+                        <>
+                          <Send className="mr-2 h-4 w-4" />
+                          微调
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Image Settings */}
