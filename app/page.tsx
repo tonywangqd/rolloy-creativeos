@@ -71,7 +71,6 @@ export default function HomePage() {
   // Prompt translation state
   const [chinesePrompt, setChinesePrompt] = useState("");
   const [isTranslating, setIsTranslating] = useState(false);
-  const [showChinesePrompt, setShowChinesePrompt] = useState(false);
 
   // Use ref to track stop state (avoids stale closure issues)
   const shouldStopRef = useRef(false);
@@ -412,7 +411,6 @@ export default function HomePage() {
       const data = await response.json();
       if (data.success) {
         setChinesePrompt(data.data.translatedPrompt);
-        setShowChinesePrompt(true);
       }
     } catch (err) {
       console.error("Background translation failed:", err);
@@ -458,36 +456,6 @@ export default function HomePage() {
       console.error(err);
     } finally {
       setIsRefining(false);
-    }
-  };
-
-  // Handle Prompt Translation
-  const handleTranslatePrompt = async () => {
-    if (!editedPrompt) return;
-
-    setIsTranslating(true);
-    setError("");
-
-    try {
-      const response = await fetch("/api/translate-prompt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: editedPrompt }),
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        setChinesePrompt(data.data.translatedPrompt);
-        setShowChinesePrompt(true);
-      } else {
-        setError(data.error?.message || "Failed to translate prompt");
-      }
-    } catch (err) {
-      setError("Network error. Please try again.");
-      console.error(err);
-    } finally {
-      setIsTranslating(false);
     }
   };
 
@@ -980,60 +948,43 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-medium">
-                      Edit Prompt (optional) - Modify and confirm, or click Generate directly
+                {/* English and Chinese Prompt Side by Side */}
+                <div className="grid grid-cols-2 gap-4">
+                  {/* English Prompt (Editable) */}
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">
+                      English Prompt (可编辑)
                     </label>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleTranslatePrompt}
-                      disabled={isTranslating || !editedPrompt}
-                      className="h-7 text-xs"
-                    >
-                      {isTranslating ? (
-                        <>
-                          <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
-                          翻译中...
-                        </>
-                      ) : (
-                        <>
-                          <Languages className="mr-1.5 h-3 w-3" />
-                          翻译成中文
-                        </>
-                      )}
-                    </Button>
+                    <Textarea
+                      value={editedPrompt}
+                      onChange={(e) => {
+                        setEditedPrompt(e.target.value);
+                        setChinesePrompt(""); // Clear translation when prompt edited
+                      }}
+                      rows={10}
+                      className="font-mono text-sm"
+                      placeholder="Edit the prompt here..."
+                    />
                   </div>
-                  <Textarea
-                    value={editedPrompt}
-                    onChange={(e) => {
-                      setEditedPrompt(e.target.value);
-                      setChinesePrompt(""); // Clear translation when prompt edited
-                      setShowChinesePrompt(false);
-                    }}
-                    rows={8}
-                    className="font-mono text-sm"
-                    placeholder="Edit the prompt here..."
-                  />
-                  {/* Chinese Translation Display */}
-                  {showChinesePrompt && chinesePrompt && (
-                    <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Languages className="h-4 w-4 text-blue-500" />
-                        <span className="text-sm font-medium text-blue-700 dark:text-blue-300">中文翻译</span>
-                        <button
-                          onClick={() => setShowChinesePrompt(false)}
-                          className="ml-auto text-xs text-muted-foreground hover:text-foreground"
-                        >
-                          收起
-                        </button>
-                      </div>
-                      <p className="text-sm text-blue-900 dark:text-blue-100 leading-relaxed">
-                        {chinesePrompt}
-                      </p>
+                  {/* Chinese Translation (Read-only) */}
+                  <div>
+                    <label className="text-sm font-medium mb-2 block flex items-center gap-2">
+                      <Languages className="h-4 w-4 text-blue-500" />
+                      中文翻译 (仅供阅读)
+                      {isTranslating && <Loader2 className="h-3 w-3 animate-spin text-blue-500" />}
+                    </label>
+                    <div className="h-[240px] p-3 rounded-md border border-input bg-muted/30 overflow-y-auto">
+                      {chinesePrompt ? (
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                          {chinesePrompt}
+                        </p>
+                      ) : isTranslating ? (
+                        <p className="text-sm text-muted-foreground">正在翻译中...</p>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">生成Prompt后将自动显示中文翻译</p>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
 
                 {/* Prompt Refinement */}
@@ -1199,61 +1150,32 @@ export default function HomePage() {
                           </button>
                         </div>
                       </div>
-                      {/* Prompt Editor */}
-                      <div className="flex-1 space-y-2">
-                        <div className="flex items-center justify-end">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleTranslatePrompt}
-                            disabled={isTranslating || !editedPrompt}
-                            className="h-6 text-[10px] px-2"
-                          >
-                            {isTranslating ? (
-                              <>
-                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                                翻译中
-                              </>
-                            ) : (
-                              <>
-                                <Languages className="mr-1 h-3 w-3" />
-                                翻译中文
-                              </>
-                            )}
-                          </Button>
-                        </div>
+                      {/* Prompt Editor - English */}
+                      <div className="flex-1">
                         <Textarea
                           value={editedPrompt}
                           onChange={(e) => {
                             setEditedPrompt(e.target.value);
                             setChinesePrompt("");
-                            setShowChinesePrompt(false);
                           }}
                           rows={4}
-                          className="font-mono text-sm"
+                          className="font-mono text-xs"
                           placeholder="Edit the prompt here..."
                         />
                       </div>
                     </div>
 
-                    {/* Chinese Translation Display - Compact */}
-                    {showChinesePrompt && chinesePrompt && (
-                      <div className="p-2 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Languages className="h-3 w-3 text-blue-500" />
-                          <span className="text-xs font-medium text-blue-700 dark:text-blue-300">中文翻译</span>
-                          <button
-                            onClick={() => setShowChinesePrompt(false)}
-                            className="ml-auto text-[10px] text-muted-foreground hover:text-foreground"
-                          >
-                            收起
-                          </button>
-                        </div>
-                        <p className="text-xs text-blue-900 dark:text-blue-100 leading-relaxed">
-                          {chinesePrompt}
-                        </p>
+                    {/* Chinese Translation - Always visible */}
+                    <div className="p-2 bg-muted/30 rounded-lg border border-input">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Languages className="h-3 w-3 text-blue-500" />
+                        <span className="text-xs font-medium">中文翻译</span>
+                        {isTranslating && <Loader2 className="h-3 w-3 animate-spin text-blue-500" />}
                       </div>
-                    )}
+                      <p className="text-xs leading-relaxed">
+                        {chinesePrompt || (isTranslating ? "正在翻译中..." : "生成或微调Prompt后自动显示")}
+                      </p>
+                    </div>
 
                     {/* Prompt Refinement - Compact version for Generate step */}
                     <div className="p-3 bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-lg border border-purple-500/20">
