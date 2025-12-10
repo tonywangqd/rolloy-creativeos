@@ -399,6 +399,28 @@ export default function HomePage() {
     }
   };
 
+  // Background translation helper (doesn't block UI)
+  const translatePromptInBackground = async (promptText: string) => {
+    setIsTranslating(true);
+    setChinesePrompt(""); // Clear old translation
+    try {
+      const response = await fetch("/api/translate-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: promptText }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setChinesePrompt(data.data.translatedPrompt);
+        setShowChinesePrompt(true);
+      }
+    } catch (err) {
+      console.error("Background translation failed:", err);
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
   // Handle Prompt Refinement
   const handleRefinePrompt = async () => {
     if (!refinementInput.trim() || !editedPrompt) {
@@ -422,11 +444,12 @@ export default function HomePage() {
       const data = await response.json();
 
       if (data.success) {
-        setPrompt(data.data.refinedPrompt);
-        setEditedPrompt(data.data.refinedPrompt);
+        const refinedPrompt = data.data.refinedPrompt;
+        setPrompt(refinedPrompt);
+        setEditedPrompt(refinedPrompt);
         setRefinementInput(""); // Clear input after success
-        setChinesePrompt(""); // Clear translation when prompt changes
-        setShowChinesePrompt(false);
+        // Auto-translate the refined prompt
+        translatePromptInBackground(refinedPrompt);
       } else {
         setError(data.error?.message || "Failed to refine prompt");
       }
@@ -498,12 +521,16 @@ export default function HomePage() {
       const data = await response.json();
 
       if (data.success) {
-        setPrompt(data.data.prompt);
-        setEditedPrompt(data.data.prompt);
+        const generatedPrompt = data.data.prompt;
+        setPrompt(generatedPrompt);
+        setEditedPrompt(generatedPrompt);
         setProductState(data.data.productState);
         setReferenceImageUrl(data.data.referenceImageUrl);
         setCreativeName(data.data.creativeName);
         setStep("prompt");
+
+        // Auto-translate to Chinese in the background
+        translatePromptInBackground(generatedPrompt);
       } else {
         setError(data.error?.message || "Failed to generate prompt");
       }
