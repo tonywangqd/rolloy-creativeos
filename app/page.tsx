@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef, useTransition, useMemo, memo } from "react";
-import { Sparkles, Eye, ImageIcon, RefreshCw, Copy, Check, Loader2, StopCircle, Cloud, Play, Pause, Star, Plus, Download, ZoomIn, Trash2, ChevronDown, ChevronUp, Pencil, Wand2, Send } from "lucide-react";
+import { Sparkles, Eye, ImageIcon, RefreshCw, Copy, Check, Loader2, StopCircle, Cloud, Play, Pause, Star, Plus, Download, ZoomIn, Trash2, ChevronDown, ChevronUp, Pencil, Wand2, Send, Languages } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -67,6 +67,11 @@ export default function HomePage() {
   // Prompt refinement state
   const [refinementInput, setRefinementInput] = useState("");
   const [isRefining, setIsRefining] = useState(false);
+
+  // Prompt translation state
+  const [chinesePrompt, setChinesePrompt] = useState("");
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [showChinesePrompt, setShowChinesePrompt] = useState(false);
 
   // Use ref to track stop state (avoids stale closure issues)
   const shouldStopRef = useRef(false);
@@ -420,6 +425,8 @@ export default function HomePage() {
         setPrompt(data.data.refinedPrompt);
         setEditedPrompt(data.data.refinedPrompt);
         setRefinementInput(""); // Clear input after success
+        setChinesePrompt(""); // Clear translation when prompt changes
+        setShowChinesePrompt(false);
       } else {
         setError(data.error?.message || "Failed to refine prompt");
       }
@@ -428,6 +435,36 @@ export default function HomePage() {
       console.error(err);
     } finally {
       setIsRefining(false);
+    }
+  };
+
+  // Handle Prompt Translation
+  const handleTranslatePrompt = async () => {
+    if (!editedPrompt) return;
+
+    setIsTranslating(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/translate-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: editedPrompt }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setChinesePrompt(data.data.translatedPrompt);
+        setShowChinesePrompt(true);
+      } else {
+        setError(data.error?.message || "Failed to translate prompt");
+      }
+    } catch (err) {
+      setError("Network error. Please try again.");
+      console.error(err);
+    } finally {
+      setIsTranslating(false);
     }
   };
 
@@ -917,16 +954,59 @@ export default function HomePage() {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium mb-2 block">
-                    Edit Prompt (optional) - Modify and confirm, or click Generate directly
-                  </label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium">
+                      Edit Prompt (optional) - Modify and confirm, or click Generate directly
+                    </label>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleTranslatePrompt}
+                      disabled={isTranslating || !editedPrompt}
+                      className="h-7 text-xs"
+                    >
+                      {isTranslating ? (
+                        <>
+                          <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                          翻译中...
+                        </>
+                      ) : (
+                        <>
+                          <Languages className="mr-1.5 h-3 w-3" />
+                          翻译成中文
+                        </>
+                      )}
+                    </Button>
+                  </div>
                   <Textarea
                     value={editedPrompt}
-                    onChange={(e) => setEditedPrompt(e.target.value)}
+                    onChange={(e) => {
+                      setEditedPrompt(e.target.value);
+                      setChinesePrompt(""); // Clear translation when prompt edited
+                      setShowChinesePrompt(false);
+                    }}
                     rows={8}
                     className="font-mono text-sm"
                     placeholder="Edit the prompt here..."
                   />
+                  {/* Chinese Translation Display */}
+                  {showChinesePrompt && chinesePrompt && (
+                    <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Languages className="h-4 w-4 text-blue-500" />
+                        <span className="text-sm font-medium text-blue-700 dark:text-blue-300">中文翻译</span>
+                        <button
+                          onClick={() => setShowChinesePrompt(false)}
+                          className="ml-auto text-xs text-muted-foreground hover:text-foreground"
+                        >
+                          收起
+                        </button>
+                      </div>
+                      <p className="text-sm text-blue-900 dark:text-blue-100 leading-relaxed">
+                        {chinesePrompt}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Prompt Refinement */}
@@ -1093,16 +1173,60 @@ export default function HomePage() {
                         </div>
                       </div>
                       {/* Prompt Editor */}
-                      <div className="flex-1">
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-center justify-end">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleTranslatePrompt}
+                            disabled={isTranslating || !editedPrompt}
+                            className="h-6 text-[10px] px-2"
+                          >
+                            {isTranslating ? (
+                              <>
+                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                翻译中
+                              </>
+                            ) : (
+                              <>
+                                <Languages className="mr-1 h-3 w-3" />
+                                翻译中文
+                              </>
+                            )}
+                          </Button>
+                        </div>
                         <Textarea
                           value={editedPrompt}
-                          onChange={(e) => setEditedPrompt(e.target.value)}
+                          onChange={(e) => {
+                            setEditedPrompt(e.target.value);
+                            setChinesePrompt("");
+                            setShowChinesePrompt(false);
+                          }}
                           rows={4}
                           className="font-mono text-sm"
                           placeholder="Edit the prompt here..."
                         />
                       </div>
                     </div>
+
+                    {/* Chinese Translation Display - Compact */}
+                    {showChinesePrompt && chinesePrompt && (
+                      <div className="p-2 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Languages className="h-3 w-3 text-blue-500" />
+                          <span className="text-xs font-medium text-blue-700 dark:text-blue-300">中文翻译</span>
+                          <button
+                            onClick={() => setShowChinesePrompt(false)}
+                            className="ml-auto text-[10px] text-muted-foreground hover:text-foreground"
+                          >
+                            收起
+                          </button>
+                        </div>
+                        <p className="text-xs text-blue-900 dark:text-blue-100 leading-relaxed">
+                          {chinesePrompt}
+                        </p>
+                      </div>
+                    )}
 
                     {/* Prompt Refinement - Compact version for Generate step */}
                     <div className="p-3 bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-lg border border-purple-500/20">
