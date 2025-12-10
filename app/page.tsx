@@ -775,7 +775,16 @@ export default function HomePage() {
         setCreativeName(data.data.creativeName);
         setStep("prompt");
 
-        // Create version FIRST (immediately), then translate in background
+        // Clear previous versions for this scenario - new generation starts from V1
+        const scenarioKey = getScenarioKey(selection);
+        setAllScenarioVersions(prev => ({
+          ...prev,
+          [scenarioKey]: [], // Reset versions for this scenario
+        }));
+        setCurrentVersionNumber(0);
+        setImages([]); // Clear previous images too
+
+        // Create version V1 (immediately), then translate in background
         const newVersionNumber = createPromptVersion(generatedPrompt);
         translatePromptInBackground(generatedPrompt, newVersionNumber);
       } else {
