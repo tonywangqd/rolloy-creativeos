@@ -39,6 +39,7 @@ interface GeneratedImage {
 const STORAGE_KEY_VERSIONS = "rolloy_prompt_versions";
 const STORAGE_KEY_IMAGES = "rolloy_generated_images";
 const STORAGE_KEY_CURRENT_VERSION = "rolloy_current_version";
+const STORAGE_KEY_SESSION_DATA = "rolloy_session_data";
 
 export default function HomePage() {
   // Session state
@@ -132,8 +133,20 @@ export default function HomePage() {
       const savedVersions = localStorage.getItem(STORAGE_KEY_VERSIONS);
       const savedImages = localStorage.getItem(STORAGE_KEY_IMAGES);
       const savedCurrentVersion = localStorage.getItem(STORAGE_KEY_CURRENT_VERSION);
+      const savedSessionData = localStorage.getItem(STORAGE_KEY_SESSION_DATA);
 
-      console.log("Loading persisted data:", { savedVersions: !!savedVersions, savedImages: !!savedImages, savedCurrentVersion });
+      console.log("Loading persisted data:", { savedVersions: !!savedVersions, savedImages: !!savedImages, savedCurrentVersion, savedSessionData: !!savedSessionData });
+
+      // Restore session data (selection, productState, etc.)
+      if (savedSessionData) {
+        const sessionData = JSON.parse(savedSessionData);
+        if (sessionData.selection) setSelection(sessionData.selection);
+        if (sessionData.productState) setProductState(sessionData.productState);
+        if (sessionData.referenceImageUrl) setReferenceImageUrl(sessionData.referenceImageUrl);
+        if (sessionData.creativeName) setCreativeName(sessionData.creativeName);
+        if (sessionData.aspectRatio) setAspectRatio(sessionData.aspectRatio);
+        if (sessionData.resolution) setResolution(sessionData.resolution);
+      }
 
       if (savedVersions) {
         const versions = JSON.parse(savedVersions) as PromptVersion[];
@@ -189,6 +202,21 @@ export default function HomePage() {
       localStorage.setItem(STORAGE_KEY_CURRENT_VERSION, currentVersionNumber.toString());
     }
   }, [currentVersionNumber]);
+
+  // Persist session data (selection, productState, etc.)
+  useEffect(() => {
+    if (selection.sceneCategory || productState || creativeName) {
+      const sessionData = {
+        selection,
+        productState,
+        referenceImageUrl,
+        creativeName,
+        aspectRatio,
+        resolution,
+      };
+      localStorage.setItem(STORAGE_KEY_SESSION_DATA, JSON.stringify(sessionData));
+    }
+  }, [selection, productState, referenceImageUrl, creativeName, aspectRatio, resolution]);
 
   const loadSessions = async () => {
     try {
@@ -1104,6 +1132,7 @@ export default function HomePage() {
                           localStorage.removeItem(STORAGE_KEY_VERSIONS);
                           localStorage.removeItem(STORAGE_KEY_IMAGES);
                           localStorage.removeItem(STORAGE_KEY_CURRENT_VERSION);
+                          localStorage.removeItem(STORAGE_KEY_SESSION_DATA);
                           setStep("select");
                         }
                       }}
@@ -1514,6 +1543,17 @@ export default function HomePage() {
                           <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/80 backdrop-blur-sm">
                             <span className="text-2xl font-light text-muted-foreground/50">{index + 1}</span>
                             <span className="text-[10px] text-muted-foreground mt-1">Waiting...</span>
+                            {/* Delete button for pending */}
+                            <button
+                              className="absolute top-2 right-2 w-6 h-6 bg-red-500/80 hover:bg-red-500 rounded-full flex items-center justify-center transition-all hover:scale-110"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteImage(image.id);
+                              }}
+                              title="取消"
+                            >
+                              <Trash2 className="h-3 w-3 text-white" />
+                            </button>
                           </div>
                         )}
 
@@ -1522,6 +1562,17 @@ export default function HomePage() {
                           <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/80 backdrop-blur-sm">
                             <Loader2 className="h-8 w-8 animate-spin text-yellow-500" />
                             <span className="text-xs text-muted-foreground mt-2">Generating...</span>
+                            {/* Delete button for generating */}
+                            <button
+                              className="absolute top-2 right-2 w-6 h-6 bg-red-500/80 hover:bg-red-500 rounded-full flex items-center justify-center transition-all hover:scale-110"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteImage(image.id);
+                              }}
+                              title="取消生成"
+                            >
+                              <Trash2 className="h-3 w-3 text-white" />
+                            </button>
                           </div>
                         )}
 
