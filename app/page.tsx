@@ -133,8 +133,11 @@ export default function HomePage() {
       const savedImages = localStorage.getItem(STORAGE_KEY_IMAGES);
       const savedCurrentVersion = localStorage.getItem(STORAGE_KEY_CURRENT_VERSION);
 
+      console.log("Loading persisted data:", { savedVersions: !!savedVersions, savedImages: !!savedImages, savedCurrentVersion });
+
       if (savedVersions) {
         const versions = JSON.parse(savedVersions) as PromptVersion[];
+        console.log("Loaded versions:", versions.map(v => ({ version: v.version, hasChinesePrompt: !!v.chinesePrompt })));
         setPromptVersions(versions);
 
         // Restore current version's prompt
@@ -143,9 +146,10 @@ export default function HomePage() {
           setCurrentVersionNumber(versionNum);
           const currentVersion = versions.find(v => v.version === versionNum);
           if (currentVersion) {
+            console.log("Restoring version:", versionNum, "Chinese:", currentVersion.chinesePrompt?.substring(0, 50));
             setEditedPrompt(currentVersion.englishPrompt);
             setPrompt(currentVersion.englishPrompt);
-            setChinesePrompt(currentVersion.chinesePrompt);
+            setChinesePrompt(currentVersion.chinesePrompt || "");
             if (versions.length > 0) {
               setStep("prompt");
             }
@@ -478,17 +482,18 @@ export default function HomePage() {
   };
 
   // Create a new prompt version
-  const createPromptVersion = (englishPrompt: string, chinesePrompt: string): number => {
+  const createPromptVersion = (englishText: string, chineseText: string): number => {
     const newVersionNumber = promptVersions.length + 1;
     const newVersion: PromptVersion = {
       id: `v${newVersionNumber}-${Date.now()}`,
       version: newVersionNumber,
-      englishPrompt,
-      chinesePrompt,
+      englishPrompt: englishText,
+      chinesePrompt: chineseText,
       createdAt: new Date().toISOString(),
     };
     setPromptVersions(prev => [...prev, newVersion]);
     setCurrentVersionNumber(newVersionNumber);
+    console.log(`Created version V${newVersionNumber} with Chinese: ${chineseText ? 'Yes' : 'No'}`);
     return newVersionNumber;
   };
 
