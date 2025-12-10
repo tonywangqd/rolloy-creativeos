@@ -188,14 +188,20 @@ function buildUserPrompt(
 
   // Scale and action guidance based on product state
   const stateGuidance = productState === 'FOLDED'
-    ? `FOLDED WALKER GUIDANCE:
-- The folded walker is COMPACT - only 66cm (26 inches) tall, about knee-height
-- Show it being: lifted with ONE hand, placed in car trunk, carried easily, standing upright in a shipping box
-- It should appear SMALL relative to the human - similar to a small carry-on suitcase
-- Example actions: lifting from ground, placing in trunk, unboxing, carrying to car`
+    ? `FOLDED WALKER GUIDANCE (CRITICAL - EXTREMELY COMPACT SIZE):
+- The folded walker is VERY SMALL - ONLY 66cm (26 inches) tall, which is KNEE-HEIGHT on an average adult
+- SCALE EMPHASIS: It reaches ONLY to the person's mid-thigh or knee level - NEVER to waist level
+- SIZE COMPARISON: Similar to a compact 20-inch carry-on suitcase, a large shopping bag, or a briefcase - NOT a full-size suitcase
+- PORTABILITY: Easily lifted and carried with ONE hand, showing it is lightweight and manageable
+- HUMAN PROPORTION: When shown with a person, the folded walker should be approximately 1/3 or less of the person's standing height
+- NEGATIVE CONSTRAINTS: It should NOT appear as large as a chair, NOT reach waist-height, NOT require two hands to lift
+- VISUAL EXAMPLES: Show it being effortlessly lifted from ground with one hand, placed standing upright in a car trunk with plenty of space around it, carried like a briefcase or small luggage, or standing next to a person reaching only to their knee
+- THE KEY MESSAGE: This is an ultra-compact, highly portable device that is surprisingly small when folded
+- Example actions: one-handed lifting from ground, placing easily in trunk, unboxing to reveal its compact size, carrying casually to car, standing next to it while it reaches only knee-height`
     : `UNFOLDED WALKER GUIDANCE:
-- The walker reaches waist-height of a standing senior
+- The walker reaches waist-height (approximately 80-90cm) of a standing senior
 - Senior's hands rest comfortably on the handles at hip level
+- This is the functional, in-use size - noticeably LARGER and more substantial than the folded state
 - Example actions: walking with support, sitting on the seat, strolling in park, resting on seat`;
 
   // Log context usage for debugging
