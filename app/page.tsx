@@ -718,14 +718,23 @@ export default function HomePage() {
         setCreativeName(data.data.creativeName);
         setStep("prompt");
 
-        // Clear previous versions - new session starts from V1
-        setPromptVersions([]);
-        setCurrentVersionNumber(0);
-        setImages([]); // Clear previous images too
+        // Clear previous data and start fresh with V1
+        setImages([]);
 
-        // Create version V1 (immediately), then translate in background
-        const newVersionNumber = createPromptVersion(generatedPrompt);
-        translatePromptInBackground(generatedPrompt, newVersionNumber);
+        // Create V1 directly (don't rely on async state update)
+        const newVersion: PromptVersion = {
+          id: `v1-${Date.now()}`,
+          version: 1,
+          englishPrompt: generatedPrompt,
+          chinesePrompt: "",
+          createdAt: new Date().toISOString(),
+        };
+        setPromptVersions([newVersion]); // Replace with single V1
+        setCurrentVersionNumber(1);
+        console.log("Created version V1 for new session");
+
+        // Translate in background and update V1's Chinese
+        translatePromptInBackground(generatedPrompt, 1);
       } else {
         setError(data.error?.message || "Failed to generate prompt");
       }
