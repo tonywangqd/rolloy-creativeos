@@ -14,7 +14,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 // ============================================================================
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || 'gemini-2.0-flash-exp';
+// Use gemini-2.5-flash for faster translation
+const TRANSLATION_MODEL = 'gemini-2.5-flash';
 
 // ============================================================================
 // Types
@@ -110,10 +111,10 @@ Please provide the Chinese translation:`;
 
     console.log('Translating prompt, length:', prompt.length);
 
-    // Call Gemini API
+    // Call Gemini API with fast model
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({
-      model: TEXT_MODEL,
+      model: TRANSLATION_MODEL,
       systemInstruction: TRANSLATION_SYSTEM_PROMPT,
     });
 
@@ -138,7 +139,7 @@ Please provide the Chinese translation:`;
     const responseData: TranslatePromptResponse = {
       translatedPrompt,
       metadata: {
-        model: TEXT_MODEL,
+        model: TRANSLATION_MODEL,
         timestamp: new Date().toISOString(),
       },
     };
