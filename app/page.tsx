@@ -49,7 +49,8 @@ const STORAGE_KEY_SESSION_DATA = "rolloy_session_data";
 
 // Generate unique key for ABCD combination (scenario)
 const getScenarioKey = (selection: ABCDSelection): string => {
-  return `${selection.sceneCategory}|${selection.sceneDetail}|${selection.action}|${selection.driver}|${selection.format}`;
+  if (!selection) return "";
+  return `${selection.sceneCategory || ""}|${selection.sceneDetail || ""}|${selection.action || ""}|${selection.driver || ""}|${selection.format || ""}`;
 };
 
 export default function HomePage() {
@@ -547,6 +548,10 @@ export default function HomePage() {
   const createPromptVersion = (englishText: string, chineseText: string = ""): number => {
     // Get or create scenario key based on current selection
     const scenarioKey = getScenarioKey(selection);
+    if (!scenarioKey) {
+      console.warn("Cannot create version: no scenario key");
+      return 0;
+    }
     const existingVersions = allScenarioVersions[scenarioKey] || [];
     const newVersionNumber = existingVersions.length + 1;
 
@@ -573,6 +578,7 @@ export default function HomePage() {
   // Update Chinese translation for a specific version
   const updateVersionChinesePrompt = (versionNumber: number, chineseText: string) => {
     const scenarioKey = getScenarioKey(selection);
+    if (!scenarioKey || versionNumber <= 0) return; // Safety check
     setAllScenarioVersions(prev => {
       const versions = prev[scenarioKey] || [];
       const updatedVersions = versions.map(v =>
