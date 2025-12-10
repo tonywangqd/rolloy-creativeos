@@ -148,6 +148,10 @@ export default function HomePage() {
   // Load persisted data from localStorage on mount
   useEffect(() => {
     try {
+      // Clean up old localStorage keys from previous versions
+      localStorage.removeItem("rolloy_prompt_versions"); // Old global versions key
+      localStorage.removeItem("rolloy_current_version"); // Old current version key
+
       const savedScenarioVersions = localStorage.getItem(STORAGE_KEY_SCENARIO_VERSIONS);
       const savedImages = localStorage.getItem(STORAGE_KEY_IMAGES);
       const savedCurrentScenario = localStorage.getItem(STORAGE_KEY_CURRENT_SCENARIO);
