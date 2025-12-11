@@ -1840,34 +1840,42 @@ export default function HomePage() {
                         {/* Success state */}
                         {image.status === "success" && image.url && (
                           <>
+                            {/* Main image - click to zoom */}
                             <img
                               src={image.url}
                               alt={`Generated ${index + 1}`}
-                              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-                              onClick={() => toggleImageSelection(image.id)}
+                              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02] cursor-zoom-in"
+                              onClick={() => {
+                                const lightboxIdx = imageIdToLightboxIndex.get(image.id) ?? 0;
+                                openLightbox(lightboxIdx);
+                              }}
                             />
-                            {/* Version badge - always visible */}
+                            {/* Selection checkbox - top left, always visible */}
+                            <button
+                              className={cn(
+                                "absolute top-2 left-2 w-6 h-6 rounded flex items-center justify-center z-20 transition-all",
+                                image.selected
+                                  ? "bg-primary shadow-lg"
+                                  : "bg-black/30 hover:bg-black/50 border-2 border-white/80"
+                              )}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleImageSelection(image.id);
+                              }}
+                              title={image.selected ? "取消选择" : "选择图片"}
+                            >
+                              {image.selected && <Check className="h-4 w-4 text-white" />}
+                            </button>
+                            {/* Version badge - bottom right with blur */}
                             {image.promptVersion && (
-                              <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white shadow-md z-10">
+                              <div className="absolute bottom-10 right-2 px-2 py-0.5 rounded text-[10px] font-bold bg-black/60 backdrop-blur-sm text-white z-10">
                                 V{image.promptVersion}
                               </div>
                             )}
                             {/* Gradient overlay for better text visibility */}
                             <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-                            {/* Action buttons on hover */}
+                            {/* Action buttons on hover - top right */}
                             <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                              {/* Zoom button */}
-                              <button
-                                className="w-8 h-8 bg-black/70 hover:bg-black/90 rounded-full flex items-center justify-center backdrop-blur-sm transition-all hover:scale-110"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const lightboxIdx = imageIdToLightboxIndex.get(image.id) ?? 0;
-                                  openLightbox(lightboxIdx);
-                                }}
-                                title="放大预览"
-                              >
-                                <ZoomIn className="h-4 w-4 text-white" />
-                              </button>
                               {/* Delete button */}
                               <button
                                 className="w-8 h-8 bg-red-500/80 hover:bg-red-500 rounded-full flex items-center justify-center backdrop-blur-sm transition-all hover:scale-110"
@@ -1891,19 +1899,9 @@ export default function HomePage() {
                           </div>
                         )}
 
-                        {/* Selection indicator - top left */}
-                        {image.selected && (
-                          <div className="absolute top-2 left-2 w-6 h-6 bg-primary rounded-full flex items-center justify-center z-10 shadow-lg">
-                            <Check className="h-3.5 w-3.5 text-primary-foreground" />
-                          </div>
-                        )}
-
-                        {/* Star rating badge */}
+                        {/* Star rating badge - always offset from checkbox */}
                         {image.rating > 0 && (
-                          <div className={cn(
-                            "absolute top-2 flex items-center gap-0.5 bg-black/70 backdrop-blur-sm rounded-full px-2 py-1",
-                            image.selected ? "left-10" : "left-2"
-                          )}>
+                          <div className="absolute top-2 left-10 flex items-center gap-0.5 bg-black/70 backdrop-blur-sm rounded-full px-2 py-1 z-10">
                             <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
                             <span className="text-[11px] text-white font-medium">{image.rating}</span>
                           </div>
