@@ -377,20 +377,31 @@ export default function HomePage() {
         setReferenceImageUrl(sessionDetail.reference_image_url);
         setCreativeName(sessionDetail.creative_name);
 
-        const restoredImages: GeneratedImage[] = sessionDetail.images.map((img: any) => ({
-          id: img.id,
-          url: img.storage_url || "",
-          storageUrl: img.storage_url || null,
-          selected: false,
-          rating: img.rating || 0,
-          status: img.status === "success" ? "success" : img.status === "failed" ? "failed" : "pending",
-          aspectRatio: img.aspect_ratio || undefined,
-          resolution: img.resolution || undefined,
-        }));
+        // Load prompt versions from cloud FIRST (needed for image-version mapping)
+        const cloudVersions = await loadVersionsFromCloud(session.id);
+
+        // Map images with version information
+        const restoredImages: GeneratedImage[] = sessionDetail.images.map((img: any) => {
+          // Find version number from cloudVersions using prompt_version_id
+          let promptVersionNumber: number | undefined;
+          if (img.prompt_version_id && cloudVersions.length > 0) {
+            const version = cloudVersions.find(v => v.cloudId === img.prompt_version_id);
+            promptVersionNumber = version?.version;
+          }
+          return {
+            id: img.id,
+            url: img.storage_url || "",
+            storageUrl: img.storage_url || null,
+            selected: false,
+            rating: img.rating || 0,
+            status: img.status === "success" ? "success" : img.status === "failed" ? "failed" : "pending",
+            aspectRatio: img.aspect_ratio || undefined,
+            resolution: img.resolution || undefined,
+            promptVersion: promptVersionNumber,
+          };
+        });
         setImages(restoredImages);
 
-        // Load prompt versions from cloud (cross-device sync)
-        const cloudVersions = await loadVersionsFromCloud(session.id);
         if (cloudVersions.length > 0) {
           setPromptVersions(cloudVersions);
           // Find active version or use latest
@@ -706,16 +717,29 @@ export default function HomePage() {
     }
   };
 
-  // Update Chinese translation in cloud
+  // Update Chinese translation in cloud (with retry for pending sync)
   const updateCloudVersionChinese = async (
     sessionId: string,
     versionNumber: number,
-    chineseText: string
+    chineseText: string,
+    retryCount: number = 0
   ) => {
-    // Find the cloud version ID
+    const MAX_RETRIES = 5;
+    const RETRY_DELAY_MS = 1000;
+
+    // Find the cloud version ID from current state
     const version = promptVersions.find(v => v.version === versionNumber);
+
     if (!version?.cloudId) {
-      console.log(`V${versionNumber} not synced to cloud yet, skipping Chinese update`);
+      // cloudId not yet available, retry after delay
+      if (retryCount < MAX_RETRIES) {
+        console.log(`V${versionNumber} cloudId not ready, retrying in ${RETRY_DELAY_MS}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+        setTimeout(() => {
+          updateCloudVersionChinese(sessionId, versionNumber, chineseText, retryCount + 1);
+        }, RETRY_DELAY_MS);
+        return;
+      }
+      console.warn(`V${versionNumber} cloudId still not available after ${MAX_RETRIES} retries, giving up`);
       return;
     }
 
@@ -808,14 +832,31 @@ export default function HomePage() {
             refinement_instruction: savedInstruction,
           }).then(cloudId => {
             if (cloudId) {
-              // Update local version with cloud ID
-              setPromptVersions(prev =>
-                prev.map(v =>
+              // Update local version with cloud ID and sync pending Chinese translation
+              setPromptVersions(prev => {
+                const updatedVersions = prev.map(v =>
                   v.version === newVersionNumber
                     ? { ...v, cloudId, synced: true }
                     : v
-                )
-              );
+                );
+                // Check if Chinese translation is ready and sync it
+                const version = updatedVersions.find(v => v.version === newVersionNumber);
+                if (version?.chinesePrompt) {
+                  // Sync Chinese translation in next tick after state update
+                  setTimeout(() => {
+                    fetch(`/api/sessions/${currentSessionId}/versions/${cloudId}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ prompt_chinese: version.chinesePrompt }),
+                    }).then(() => {
+                      console.log(`Synced pending Chinese for V${newVersionNumber}`);
+                    }).catch(err => {
+                      console.error("Failed to sync pending Chinese:", err);
+                    });
+                  }, 100);
+                }
+                return updatedVersions;
+              });
             }
           });
         }
@@ -920,6 +961,7 @@ export default function HomePage() {
       // Sync V1 to cloud after session is created
       const currentVersion = promptVersions.find(v => v.version === currentVersionNumber);
       if (currentVersion && !currentVersion.synced) {
+        const versionToSync = currentVersionNumber; // Capture for closure
         syncVersionToCloud(activeSessionId, {
           prompt: currentVersion.englishPrompt,
           prompt_chinese: currentVersion.chinesePrompt,
@@ -928,14 +970,32 @@ export default function HomePage() {
           created_from: "initial",
         }).then(cloudId => {
           if (cloudId) {
-            setPromptVersions(prev =>
-              prev.map(v =>
-                v.version === currentVersionNumber
+            // Update local version with cloud ID
+            setPromptVersions(prev => {
+              const updatedVersions = prev.map(v =>
+                v.version === versionToSync
                   ? { ...v, cloudId, synced: true }
                   : v
-              )
-            );
-            console.log(`Synced V${currentVersionNumber} to cloud`);
+              );
+              // Check if Chinese translation completed after sync started
+              const version = updatedVersions.find(v => v.version === versionToSync);
+              if (version?.chinesePrompt && !currentVersion.chinesePrompt) {
+                // Translation completed after sync, update cloud
+                setTimeout(() => {
+                  fetch(`/api/sessions/${activeSessionId}/versions/${cloudId}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ prompt_chinese: version.chinesePrompt }),
+                  }).then(() => {
+                    console.log(`Synced late Chinese for V${versionToSync}`);
+                  }).catch(err => {
+                    console.error("Failed to sync late Chinese:", err);
+                  });
+                }, 100);
+              }
+              return updatedVersions;
+            });
+            console.log(`Synced V${versionToSync} to cloud`);
           }
         });
       }
@@ -965,6 +1025,10 @@ export default function HomePage() {
       ));
 
       try {
+        // Get current version's cloud ID for linking images to version
+        const currentVersion = promptVersions.find(v => v.version === currentVersionNumber);
+        const versionCloudId = currentVersion?.cloudId;
+
         const response = await fetch("/api/generate-single", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -975,6 +1039,7 @@ export default function HomePage() {
             totalImages: endIndex,
             creativeName,
             sessionId: activeSessionId,
+            promptVersionId: versionCloudId,
             aspectRatio,
             resolution,
             productState,

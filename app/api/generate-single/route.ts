@@ -33,6 +33,7 @@ interface GenerateSingleRequest {
   totalImages: number;
   creativeName: string; // For storage path
   sessionId?: string; // For updating database record
+  promptVersionId?: string; // For linking image to prompt version
   aspectRatio?: string; // "1:1", "2:3", "3:2", etc.
   resolution?: string; // "1K", "2K", "4K"
   productState?: "FOLDED" | "UNFOLDED"; // Product state for scale reference
@@ -130,7 +131,8 @@ async function updateImageRecord(
   storageUrl: string,
   storagePath: string,
   aspectRatio: string,
-  resolution: string
+  resolution: string,
+  promptVersionId?: string
 ): Promise<boolean> {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     return false;
@@ -141,17 +143,25 @@ async function updateImageRecord(
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
+    // Build update object
+    const updateData: Record<string, unknown> = {
+      status: 'success',
+      storage_url: storageUrl,
+      storage_path: storagePath,
+      generated_at: new Date().toISOString(),
+      aspect_ratio: aspectRatio,
+      resolution: resolution,
+    };
+
+    // Link to prompt version if provided
+    if (promptVersionId) {
+      updateData.prompt_version_id = promptVersionId;
+    }
+
     // Update the image record by session_id and image_index
     const { error } = await supabase
       .from('generated_images_v2')
-      .update({
-        status: 'success',
-        storage_url: storageUrl,
-        storage_path: storagePath,
-        generated_at: new Date().toISOString(),
-        aspect_ratio: aspectRatio,
-        resolution: resolution,
-      })
+      .update(updateData)
       .eq('session_id', sessionId)
       .eq('image_index', imageIndex + 1); // image_index is 1-based in DB
 
@@ -160,7 +170,7 @@ async function updateImageRecord(
       return false;
     }
 
-    console.log(`Updated DB record for session ${sessionId}, image ${imageIndex + 1} (${aspectRatio} ${resolution})`);
+    console.log(`Updated DB record for session ${sessionId}, image ${imageIndex + 1} (${aspectRatio} ${resolution}, version: ${promptVersionId || 'none'})`);
     return true;
   } catch (error) {
     console.error('Failed to update image record:', error);
@@ -182,6 +192,7 @@ export async function POST(request: NextRequest) {
       totalImages,
       creativeName,
       sessionId,
+      promptVersionId,
       aspectRatio = "1:1",
       resolution = "1K",
       productState = "UNFOLDED"
@@ -317,14 +328,15 @@ CRITICAL INSTRUCTIONS:
 
           // Always update database record if sessionId provided
           if (sessionId) {
-            console.log(`Updating DB record: session=${sessionId}, index=${imageIndex}, ratio=${aspectRatio}, res=${resolution}`);
+            console.log(`Updating DB record: session=${sessionId}, index=${imageIndex}, ratio=${aspectRatio}, res=${resolution}, versionId=${promptVersionId || 'none'}`);
             const dbUpdated = await updateImageRecord(
               sessionId,
               imageIndex,
               storageResult?.publicUrl || '',
               storageResult?.storagePath || '',
               aspectRatio,
-              resolution
+              resolution,
+              promptVersionId
             );
             console.log(`DB update result: ${dbUpdated ? 'SUCCESS' : 'FAILED'}`);
           } else {
