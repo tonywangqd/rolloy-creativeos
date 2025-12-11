@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  listPromptVersionsSummary,
+  listPromptVersions,
   createPromptVersion,
   getActiveVersion,
 } from '@/lib/services/prompt-version-service';
@@ -28,8 +28,8 @@ export async function GET(
   try {
     const sessionId = params.id;
 
-    // Fetch all versions for this session
-    const versions = await listPromptVersionsSummary(sessionId);
+    // Fetch all versions for this session (full data including prompt)
+    const versions = await listPromptVersions(sessionId);
 
     // Get active version ID
     const activeVersion = await getActiveVersion(sessionId);
@@ -39,10 +39,11 @@ export async function GET(
         id: v.id,
         session_id: sessionId,
         version_number: v.version_number,
-        prompt: '', // Not included in summary
+        prompt: v.prompt, // Include full prompt for cross-device sync
+        prompt_chinese: v.prompt_chinese, // Include Chinese translation
         product_state: v.product_state,
-        reference_image_url: '',
-        created_from: 'initial', // Not included in summary
+        reference_image_url: v.reference_image_url,
+        created_from: v.created_from,
         is_active: v.is_active,
         created_at: v.created_at,
       })),

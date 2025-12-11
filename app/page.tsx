@@ -14,13 +14,17 @@ import { cn } from "@/lib/utils";
 
 type WorkflowStep = "select" | "prompt" | "generate";
 
-// Prompt Version for tracking history (per scenario)
+// Prompt Version for tracking history (per session)
+// Compatible with cloud storage in prompt_versions table
 interface PromptVersion {
   id: string;
   version: number;
   englishPrompt: string;
   chinesePrompt: string;
   createdAt: string;
+  // Cloud sync fields
+  cloudId?: string; // UUID from Supabase prompt_versions table
+  synced?: boolean; // Whether this version has been synced to cloud
 }
 
 interface GeneratedImage {
@@ -385,6 +389,32 @@ export default function HomePage() {
         }));
         setImages(restoredImages);
 
+        // Load prompt versions from cloud (cross-device sync)
+        const cloudVersions = await loadVersionsFromCloud(session.id);
+        if (cloudVersions.length > 0) {
+          setPromptVersions(cloudVersions);
+          // Find active version or use latest
+          const activeVersion = cloudVersions.find(v => v.synced) || cloudVersions[cloudVersions.length - 1];
+          setCurrentVersionNumber(activeVersion.version);
+          setEditedPrompt(activeVersion.englishPrompt);
+          setPrompt(activeVersion.englishPrompt);
+          setChinesePrompt(activeVersion.chinesePrompt);
+          console.log(`Restored ${cloudVersions.length} versions from cloud, active: V${activeVersion.version}`);
+        } else {
+          // Fallback: create V1 from session prompt if no cloud versions
+          const fallbackVersion: PromptVersion = {
+            id: `v1-${Date.now()}`,
+            version: 1,
+            englishPrompt: sessionDetail.prompt,
+            chinesePrompt: "",
+            createdAt: sessionDetail.created_at,
+            synced: false,
+          };
+          setPromptVersions([fallbackVersion]);
+          setCurrentVersionNumber(1);
+          console.log("No cloud versions found, created fallback V1");
+        }
+
         if (sessionDetail.status === "draft") {
           setStep("prompt");
         } else {
@@ -615,6 +645,97 @@ export default function HomePage() {
     }
   };
 
+  // ============================================================================
+  // Cloud Sync Functions - Save versions to Supabase for cross-device access
+  // ============================================================================
+
+  // Save a prompt version to cloud (called after session is created)
+  const syncVersionToCloud = async (
+    sessionId: string,
+    versionData: {
+      prompt: string;
+      prompt_chinese?: string;
+      product_state: string;
+      reference_image_url: string;
+      created_from: "initial" | "refinement" | "product_state_change";
+      refinement_instruction?: string;
+    }
+  ): Promise<string | null> => {
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}/versions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(versionData),
+      });
+      const data = await response.json();
+      if (data.success && data.data?.version?.id) {
+        console.log(`Synced version to cloud: ${data.data.version_number}`);
+        return data.data.version.id;
+      }
+      console.warn("Failed to sync version to cloud:", data.error);
+      return null;
+    } catch (err) {
+      console.error("Cloud sync error:", err);
+      return null;
+    }
+  };
+
+  // Load versions from cloud (called when loading a session)
+  const loadVersionsFromCloud = async (sessionId: string): Promise<PromptVersion[]> => {
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}/versions`);
+      const data = await response.json();
+      if (data.success && data.data?.versions) {
+        // Convert cloud format to local format
+        const cloudVersions: PromptVersion[] = data.data.versions.map((v: any) => ({
+          id: `v${v.version_number}-${Date.now()}`,
+          version: v.version_number,
+          englishPrompt: v.prompt,
+          chinesePrompt: v.prompt_chinese || "",
+          createdAt: v.created_at,
+          cloudId: v.id,
+          synced: true,
+        }));
+        console.log(`Loaded ${cloudVersions.length} versions from cloud`);
+        return cloudVersions;
+      }
+      return [];
+    } catch (err) {
+      console.error("Failed to load versions from cloud:", err);
+      return [];
+    }
+  };
+
+  // Update Chinese translation in cloud
+  const updateCloudVersionChinese = async (
+    sessionId: string,
+    versionNumber: number,
+    chineseText: string
+  ) => {
+    // Find the cloud version ID
+    const version = promptVersions.find(v => v.version === versionNumber);
+    if (!version?.cloudId) {
+      console.log(`V${versionNumber} not synced to cloud yet, skipping Chinese update`);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}/versions/${version.cloudId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt_chinese: chineseText }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        console.log(`Updated Chinese for V${versionNumber} in cloud`);
+      } else {
+        console.warn("Failed to update cloud Chinese:", data.error);
+      }
+    } catch (err) {
+      console.error("Failed to update cloud version Chinese:", err);
+    }
+  };
+
   // Background translation helper - updates existing version's Chinese translation
   const translatePromptInBackground = async (promptText: string, versionNumber: number) => {
     setIsTranslating(true);
@@ -629,8 +750,13 @@ export default function HomePage() {
       if (data.success) {
         const translatedText = data.data.translatedPrompt;
         setChinesePrompt(translatedText);
-        // Update the version's Chinese translation
+        // Update the version's Chinese translation locally
         updateVersionChinesePrompt(versionNumber, translatedText);
+
+        // Also update in cloud if session exists
+        if (currentSessionId) {
+          updateCloudVersionChinese(currentSessionId, versionNumber, translatedText);
+        }
       }
     } catch (err) {
       console.error("Background translation failed:", err);
@@ -665,10 +791,34 @@ export default function HomePage() {
         const refinedPrompt = data.data.refinedPrompt;
         setPrompt(refinedPrompt);
         setEditedPrompt(refinedPrompt);
+        const savedInstruction = refinementInput.trim();
         setRefinementInput(""); // Clear input after success
+
         // Create version FIRST (immediately), then translate in background
         const newVersionNumber = createPromptVersion(refinedPrompt);
         translatePromptInBackground(refinedPrompt, newVersionNumber);
+
+        // Sync to cloud if we have a session
+        if (currentSessionId) {
+          syncVersionToCloud(currentSessionId, {
+            prompt: refinedPrompt,
+            product_state: productState,
+            reference_image_url: referenceImageUrl,
+            created_from: "refinement",
+            refinement_instruction: savedInstruction,
+          }).then(cloudId => {
+            if (cloudId) {
+              // Update local version with cloud ID
+              setPromptVersions(prev =>
+                prev.map(v =>
+                  v.version === newVersionNumber
+                    ? { ...v, cloudId, synced: true }
+                    : v
+                )
+              );
+            }
+          });
+        }
       } else {
         setError(data.error?.message || "Failed to refine prompt");
       }
@@ -765,6 +915,29 @@ export default function HomePage() {
         setError("Failed to create session");
         setIsGeneratingImages(false);
         return;
+      }
+
+      // Sync V1 to cloud after session is created
+      const currentVersion = promptVersions.find(v => v.version === currentVersionNumber);
+      if (currentVersion && !currentVersion.synced) {
+        syncVersionToCloud(activeSessionId, {
+          prompt: currentVersion.englishPrompt,
+          prompt_chinese: currentVersion.chinesePrompt,
+          product_state: productState,
+          reference_image_url: referenceImageUrl,
+          created_from: "initial",
+        }).then(cloudId => {
+          if (cloudId) {
+            setPromptVersions(prev =>
+              prev.map(v =>
+                v.version === currentVersionNumber
+                  ? { ...v, cloudId, synced: true }
+                  : v
+              )
+            );
+            console.log(`Synced V${currentVersionNumber} to cloud`);
+          }
+        });
       }
     } else {
       await updateSessionStatus(activeSessionId, "in_progress");
