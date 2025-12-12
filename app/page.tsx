@@ -1037,9 +1037,9 @@ export default function HomePage() {
         setVideoPrompt("");  // Clear video prompt for new version
         console.log("Created version V1 for new session");
 
-        // NOTE: Do NOT translate here - wait until session is created
-        // Translation will be triggered in handleGenerateBatch after session creation
-        // to ensure cloudId is available for cloud sync
+        // Start translation immediately for better UX
+        // Cloud sync will happen later via retry mechanism when session/cloudId is available
+        translatePromptInBackground(generatedPrompt, 1);
       } else {
         setError(data.error?.message || "Failed to generate prompt");
       }
