@@ -944,12 +944,11 @@ export default function HomePage() {
         const savedInstruction = refinementInput.trim();
         setRefinementInput(""); // Clear input after success
 
-        // Create version FIRST (immediately), then translate in background
+        // Create version FIRST (immediately)
         const newVersionNumber = createPromptVersion(refinedPrompt);
-        translatePromptInBackground(refinedPrompt, newVersionNumber);
 
-        // Sync to cloud if we have a session
-        // Pass versionNumber so syncVersionToCloud can update state with cloudId
+        // Sync to cloud if we have a session, then start translation
+        // This ensures cloudId is available before translation completes
         if (currentSessionId) {
           syncVersionToCloud(currentSessionId, {
             prompt: refinedPrompt,
@@ -958,25 +957,19 @@ export default function HomePage() {
             created_from: "refinement",
             refinement_instruction: savedInstruction,
           }, newVersionNumber).then(cloudId => {
-            // syncVersionToCloud now updates state with cloudId automatically
-            // Also sync pending Chinese if ready
+            // syncVersionToCloud updates state with cloudId automatically
+            console.log(`V${newVersionNumber} synced to cloud with ID: ${cloudId}`);
+
+            // NOW start translation since we have cloudId
+            // This ensures updateCloudVersionChinese will find both sessionId and cloudId
             if (cloudId) {
-              const version = promptVersions.find(v => v.version === newVersionNumber);
-              if (version?.chinesePrompt) {
-                setTimeout(() => {
-                  fetch(`/api/sessions/${currentSessionId}/versions/${cloudId}`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ prompt_chinese: version.chinesePrompt }),
-                  }).then(() => {
-                    console.log(`Synced pending Chinese for V${newVersionNumber}`);
-                  }).catch(err => {
-                    console.error("Failed to sync pending Chinese:", err);
-                  });
-                }, 100);
-              }
+              console.log(`Starting translation for V${newVersionNumber} now that cloudId is ready`);
+              translatePromptInBackground(refinedPrompt, newVersionNumber);
             }
           });
+        } else {
+          // No session yet, translate immediately (cloud sync will happen later)
+          translatePromptInBackground(refinedPrompt, newVersionNumber);
         }
       } else {
         setError(data.error?.message || "Failed to refine prompt");
@@ -1044,8 +1037,9 @@ export default function HomePage() {
         setVideoPrompt("");  // Clear video prompt for new version
         console.log("Created version V1 for new session");
 
-        // Translate in background and update V1's Chinese
-        translatePromptInBackground(generatedPrompt, 1);
+        // NOTE: Do NOT translate here - wait until session is created
+        // Translation will be triggered in handleGenerateBatch after session creation
+        // to ensure cloudId is available for cloud sync
       } else {
         setError(data.error?.message || "Failed to generate prompt");
       }
@@ -1106,6 +1100,8 @@ export default function HomePage() {
       const currentVersion = promptVersions.find(v => v.version === currentVersionNumber);
       if (currentVersion && !currentVersion.synced) {
         const versionToSync = currentVersionNumber; // Capture for closure
+        const englishPrompt = currentVersion.englishPrompt; // Capture for translation
+
         syncVersionToCloud(activeSessionId, {
           prompt: currentVersion.englishPrompt,
           prompt_chinese: currentVersion.chinesePrompt,
@@ -1114,23 +1110,14 @@ export default function HomePage() {
           reference_image_url: referenceImageUrl,
           created_from: "initial",
         }, versionToSync).then(cloudId => {
-          // syncVersionToCloud now updates state with cloudId automatically
-          // Check if Chinese translation completed after sync started
-          if (cloudId) {
-            const version = promptVersions.find(v => v.version === versionToSync);
-            if (version?.chinesePrompt && !currentVersion.chinesePrompt) {
-              setTimeout(() => {
-                fetch(`/api/sessions/${activeSessionId}/versions/${cloudId}`, {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ prompt_chinese: version.chinesePrompt }),
-                }).then(() => {
-                  console.log(`Synced late Chinese for V${versionToSync}`);
-                }).catch(err => {
-                  console.error("Failed to sync late Chinese:", err);
-                });
-              }, 100);
-            }
+          // syncVersionToCloud updates state with cloudId automatically
+          console.log(`V${versionToSync} synced to cloud with ID: ${cloudId}`);
+
+          // NOW start translation since we have session and cloudId
+          // This ensures updateCloudVersionChinese will find both sessionId and cloudId
+          if (cloudId && versionToSync === 1 && !currentVersion.chinesePrompt) {
+            console.log(`Starting translation for V${versionToSync} now that cloudId is ready`);
+            translatePromptInBackground(englishPrompt, versionToSync);
           }
         });
       }
