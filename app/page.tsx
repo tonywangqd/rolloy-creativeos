@@ -1049,6 +1049,37 @@ export default function HomePage() {
     }
   };
 
+  // Helper: Ensure current version has cloudId (wait for sync if needed)
+  const ensureVersionCloudId = async (sessionId: string, version: PromptVersion): Promise<string | null> => {
+    // If already has cloudId, return it
+    if (version.cloudId) {
+      return version.cloudId;
+    }
+
+    // Need to sync to cloud and wait for it
+    console.log(`V${version.version} needs to be synced to cloud before generating images...`);
+
+    const cloudId = await syncVersionToCloud(sessionId, {
+      prompt: version.englishPrompt,
+      prompt_chinese: version.chinesePrompt,
+      product_state: productState,
+      reference_image_url: referenceImageUrl,
+      created_from: "initial",
+    });
+
+    if (cloudId) {
+      // Update local version with cloud ID
+      setPromptVersions(prev => prev.map(v =>
+        v.version === version.version
+          ? { ...v, cloudId, synced: true }
+          : v
+      ));
+      console.log(`V${version.version} synced to cloud: ${cloudId}`);
+    }
+
+    return cloudId;
+  };
+
   // Generate a batch of images (4 at a time, 1 second delay between each)
   const handleGenerateBatch = useCallback(async () => {
     setIsGeneratingImages(true);
@@ -1115,6 +1146,18 @@ export default function HomePage() {
       await updateSessionStatus(activeSessionId, "in_progress");
     }
 
+    // IMPORTANT: Ensure current version is synced to cloud before generating images
+    // This fixes the bug where V2-V4 images were not saved with version info
+    const currentVersion = promptVersions.find(v => v.version === currentVersionNumber);
+    let versionCloudId: string | null = null;
+
+    if (currentVersion) {
+      versionCloudId = await ensureVersionCloudId(activeSessionId, currentVersion);
+      if (!versionCloudId) {
+        console.warn(`Failed to sync V${currentVersionNumber} to cloud, images will not be linked to version`);
+      }
+    }
+
     // Add pending images for this batch (with current settings and version)
     const newPendingImages: GeneratedImage[] = Array.from({ length: BATCH_SIZE }, (_, i) => ({
       id: `img-${startIndex + i + 1}-${Date.now()}`,
@@ -1130,6 +1173,7 @@ export default function HomePage() {
     setImages(prev => [...prev, ...newPendingImages]);
 
     // Generate single image (returns a promise)
+    // versionCloudId is captured here and used for all images in this batch
     const generateSingleImage = async (globalIndex: number) => {
       // Update status to generating
       setImages(prev => prev.map((img, idx) =>
@@ -1137,9 +1181,7 @@ export default function HomePage() {
       ));
 
       try {
-        // Get current version's cloud ID for linking images to version
-        const currentVersion = promptVersions.find(v => v.version === currentVersionNumber);
-        const versionCloudId = currentVersion?.cloudId;
+        // Use the versionCloudId that was ensured before batch started
 
         const response = await fetch("/api/generate-single", {
           method: "POST",
