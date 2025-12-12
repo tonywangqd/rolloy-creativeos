@@ -334,12 +334,14 @@ ${scaleNegativePrompt}
 CRITICAL INSTRUCTIONS:
 1. PRODUCT PRESERVATION: The red 'Rolloy Compact Master' rollator must be rendered EXACTLY as shown in the reference image - same design, color, and components. No modifications.
 2. SCALE ACCURACY: Maintain realistic proportions - the product size relative to humans must match real-world scale. Follow the MANDATORY SCALE CONSTRAINT above strictly.
-3. COMPOSITION - SAFE ZONE FOR TEXT OVERLAY:
-   - TOP 30%: Leave the top 30% of the image as "breathing space" - show background, sky, ceiling, or environment elements. Do NOT place the subject's head, face, or product in this zone. This area will be used for advertising copy overlay.
-   - BOTTOM 5%: Leave a small margin at the bottom edge.
-   - LEFT 5% and RIGHT 5%: Leave small margins on both sides.
-   - SAFE ZONE: Position the main subject (person + product) within the central safe zone: from 30% to 95% vertically, and from 5% to 95% horizontally.
-   - This ensures the human subject and product are framed lower in the image, with clean space above for text.
+3. **MANDATORY COMPOSITION - ADVERTISING SAFE ZONE** (STRICTLY ENFORCED):
+   - **TOP 30% MUST BE EMPTY OF SUBJECTS**: The top 30% of the frame MUST contain ONLY background elements (walls, sky, ceiling, curtains, environment). NEVER place ANY part of the human subject's head, hair, or face in this zone. The subject's head should be positioned well BELOW the 30% line.
+   - **FRAME THE SUBJECT LOW**: Position the entire human figure in the LOWER portion of the frame. The top of the subject's head should be at approximately 35-40% from the top of the image, leaving generous headroom.
+   - **DO NOT**: Cut off the top of the head, place hair touching the top edge, or position the face in the upper third.
+   - **DO**: Show ceiling, walls, windows, or environmental context above the subject's head.
+   - BOTTOM 5%: Small margin at the bottom edge.
+   - LEFT 5% and RIGHT 5%: Small margins on both sides.
+   - **CRITICAL**: This is for advertising text overlay. The top area must be CLEAN and CONTEXTUAL (showing real background), NOT blank white space.
 4. VARIATION: This is variation ${imageIndex + 1} of ${totalImages} - create a unique scene with different camera angle, lighting, or composition while respecting the safe zone.
 5. ASPECT RATIO: Output in ${aspectRatio} format.
 6. QUALITY: Commercial photography style, Photorealistic, Ultra high definition (UHD), professional lighting.`;
