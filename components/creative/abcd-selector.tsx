@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
@@ -125,6 +125,48 @@ export function ABCDSelector({ onSelectionChange, initialSelection, disabled }: 
   // Loading indicator
   const isLoading = loadingCategories || loadingDetails || loadingActions || loadingEmotions || loadingFormats;
 
+  // Memoized sorted options to avoid re-sorting on every render
+  const sortedCategories = useMemo(() =>
+    sceneCategories?.slice().sort((a, b) => a.sort_order - b.sort_order) || [],
+    [sceneCategories]
+  );
+
+  const sortedActions = useMemo(() =>
+    actions?.slice().sort((a, b) => a.sort_order - b.sort_order) || [],
+    [actions]
+  );
+
+  const sortedEmotions = useMemo(() =>
+    emotions?.slice().sort((a, b) => a.sort_order - b.sort_order) || [],
+    [emotions]
+  );
+
+  const sortedFormats = useMemo(() =>
+    formats?.slice().sort((a, b) => a.sort_order - b.sort_order) || [],
+    [formats]
+  );
+
+  // Optimized onChange handlers
+  const handleSceneCategoryChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSceneCategory(e.target.value);
+  }, []);
+
+  const handleSceneDetailChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setSceneDetail(e.target.value);
+  }, []);
+
+  const handleActionChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setAction(e.target.value);
+  }, []);
+
+  const handleDriverChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setDriver(e.target.value);
+  }, []);
+
+  const handleFormatChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setFormat(e.target.value);
+  }, []);
+
   return (
     <Card>
       <CardHeader>
@@ -142,11 +184,11 @@ export function ABCDSelector({ onSelectionChange, initialSelection, disabled }: 
           <Select
             label="Scene Category"
             value={sceneCategory}
-            onChange={(e) => setSceneCategory(e.target.value)}
+            onChange={handleSceneCategoryChange}
             disabled={disabled || loadingCategories}
           >
             <option value="">选择场景分类...</option>
-            {sceneCategories?.sort((a, b) => a.sort_order - b.sort_order).map((cat) => (
+            {sortedCategories.map((cat) => (
               <option key={cat.id} value={cat.code}>
                 {formatLabel(cat.code, cat.name_zh)}
               </option>
@@ -156,7 +198,7 @@ export function ABCDSelector({ onSelectionChange, initialSelection, disabled }: 
           <Select
             label="Scene Detail"
             value={sceneDetail}
-            onChange={(e) => setSceneDetail(e.target.value)}
+            onChange={handleSceneDetailChange}
             disabled={disabled || !sceneCategory || loadingDetails}
           >
             <option value="">选择具体场景...</option>
@@ -176,11 +218,11 @@ export function ABCDSelector({ onSelectionChange, initialSelection, disabled }: 
           <Select
             label="Action"
             value={action}
-            onChange={(e) => setAction(e.target.value)}
+            onChange={handleActionChange}
             disabled={disabled || loadingActions}
           >
             <option value="">选择动作...</option>
-            {actions?.sort((a, b) => a.sort_order - b.sort_order).map((act) => (
+            {sortedActions.map((act) => (
               <option key={act.id} value={act.code}>
                 {formatLabel(act.code, act.name_zh)}
               </option>
@@ -196,11 +238,11 @@ export function ABCDSelector({ onSelectionChange, initialSelection, disabled }: 
           <Select
             label="Emotional Driver"
             value={driver}
-            onChange={(e) => setDriver(e.target.value)}
+            onChange={handleDriverChange}
             disabled={disabled || loadingEmotions}
           >
             <option value="">选择情绪驱动...</option>
-            {emotions?.sort((a, b) => a.sort_order - b.sort_order).map((emo) => (
+            {sortedEmotions.map((emo) => (
               <option key={emo.id} value={emo.code}>
                 {formatLabel(emo.code, emo.name_zh)}
               </option>
@@ -216,11 +258,11 @@ export function ABCDSelector({ onSelectionChange, initialSelection, disabled }: 
           <Select
             label="Creative Format"
             value={format}
-            onChange={(e) => setFormat(e.target.value)}
+            onChange={handleFormatChange}
             disabled={disabled || loadingFormats}
           >
             <option value="">选择格式...</option>
-            {formats?.sort((a, b) => a.sort_order - b.sort_order).map((fmt) => (
+            {sortedFormats.map((fmt) => (
               <option key={fmt.id} value={fmt.code}>
                 {formatLabel(fmt.code, fmt.name_zh)}
               </option>

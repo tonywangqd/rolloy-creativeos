@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { Plus, History, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,17 +28,41 @@ export function SessionList({
   className,
 }: SessionListProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [localSearchQuery, setLocalSearchQuery] = useState(""); // Local state for immediate UI feedback
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Filter sessions based on search query
-  const filteredSessions = sessions.filter(session =>
-    session.creative_name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Debounced search handler
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setLocalSearchQuery(value); // Immediate UI feedback
 
-  // Sort sessions by updated_at (newest first)
-  const sortedSessions = [...filteredSessions].sort(
-    (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-  );
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      setSearchQuery(value);
+    }, 300);
+  }, []);
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Memoized filtered and sorted sessions
+  const sortedSessions = useMemo(() => {
+    const filtered = sessions.filter(session =>
+      session.creative_name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    return [...filtered].sort(
+      (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    );
+  }, [sessions, searchQuery]);
 
   if (isCollapsed) {
     return (
@@ -90,8 +114,8 @@ export function SessionList({
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search sessions..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={localSearchQuery}
+              onChange={handleSearchChange}
               className="pl-8 h-9"
             />
           </div>
@@ -102,7 +126,7 @@ export function SessionList({
           <div className="space-y-2">
             {sortedSessions.length === 0 ? (
               <div className="text-center py-8 text-sm text-muted-foreground">
-                {searchQuery ? "No sessions found" : "No sessions yet"}
+                {localSearchQuery ? "No sessions found" : "No sessions yet"}
               </div>
             ) : (
               sortedSessions.map((session) => (

@@ -64,6 +64,7 @@ export default function HomePage() {
   const [step, setStep] = useState<WorkflowStep>("select");
   const [prompt, setPrompt] = useState("");
   const [editedPrompt, setEditedPrompt] = useState("");
+  const [localEditedPrompt, setLocalEditedPrompt] = useState(""); // Local state for immediate UI feedback
   const [productState, setProductState] = useState("");
   const [referenceImageUrl, setReferenceImageUrl] = useState("");
   const [creativeName, setCreativeName] = useState("");
@@ -86,6 +87,7 @@ export default function HomePage() {
 
   // Prompt refinement state
   const [refinementInput, setRefinementInput] = useState("");
+  const [localRefinementInput, setLocalRefinementInput] = useState(""); // Local state for immediate UI feedback
   const [isRefining, setIsRefining] = useState(false);
 
   // Prompt translation state
@@ -109,6 +111,10 @@ export default function HomePage() {
   // Use ref to track latest sessionId (avoids stale closure issues)
   const currentSessionIdRef = useRef<string | null>(null);
 
+  // Debounce timer refs for input optimization
+  const editedPromptDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const refinementDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
   // Lightbox state
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -122,6 +128,41 @@ export default function HomePage() {
     startTransition(() => {
       setIsPromptPanelOpen(prev => !prev);
     });
+  }, []);
+
+  // Debounced handler for editedPrompt textarea
+  const handleEditedPromptChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setLocalEditedPrompt(value); // Immediate UI feedback
+
+    if (editedPromptDebounceRef.current) {
+      clearTimeout(editedPromptDebounceRef.current);
+    }
+    editedPromptDebounceRef.current = setTimeout(() => {
+      setEditedPrompt(value);
+      setChinesePrompt(""); // Clear translation when prompt edited
+    }, 300);
+  }, []);
+
+  // Debounced handler for refinement input
+  const handleRefinementInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setLocalRefinementInput(value); // Immediate UI feedback
+
+    if (refinementDebounceRef.current) {
+      clearTimeout(refinementDebounceRef.current);
+    }
+    refinementDebounceRef.current = setTimeout(() => {
+      setRefinementInput(value);
+    }, 300);
+  }, []);
+
+  // Cleanup debounce timers on unmount
+  useEffect(() => {
+    return () => {
+      if (editedPromptDebounceRef.current) clearTimeout(editedPromptDebounceRef.current);
+      if (refinementDebounceRef.current) clearTimeout(refinementDebounceRef.current);
+    };
   }, []);
 
   // Batch size - generate 4 images at a time
@@ -203,6 +244,7 @@ export default function HomePage() {
           if (currentVersion) {
             console.log("Restoring version:", currentVersion.version);
             setEditedPrompt(currentVersion.englishPrompt);
+            setLocalEditedPrompt(currentVersion.englishPrompt);
             setPrompt(currentVersion.englishPrompt);
             setChinesePrompt(currentVersion.chinesePrompt || "");
             setVideoPrompt(currentVersion.videoPrompt || "");
@@ -405,6 +447,7 @@ export default function HomePage() {
         });
         setPrompt(sessionDetail.prompt);
         setEditedPrompt(sessionDetail.prompt);
+        setLocalEditedPrompt(sessionDetail.prompt);
         setProductState(sessionDetail.product_state);
         setReferenceImageUrl(sessionDetail.reference_image_url);
         setCreativeName(sessionDetail.creative_name);
@@ -453,6 +496,7 @@ export default function HomePage() {
           const activeVersion = cloudVersions.find(v => v.synced) || cloudVersions[cloudVersions.length - 1];
           setCurrentVersionNumber(activeVersion.version);
           setEditedPrompt(activeVersion.englishPrompt);
+          setLocalEditedPrompt(activeVersion.englishPrompt);
           setPrompt(activeVersion.englishPrompt);
           setChinesePrompt(activeVersion.chinesePrompt);
           setVideoPrompt(activeVersion.videoPrompt || "");
@@ -615,6 +659,7 @@ export default function HomePage() {
     setStep("select");
     setPrompt("");
     setEditedPrompt("");
+    setLocalEditedPrompt("");
     setChinesePrompt("");
     setVideoPrompt("");
     setImages([]);
@@ -666,6 +711,7 @@ export default function HomePage() {
         if (data.success) {
           setPrompt(data.data.prompt);
           setEditedPrompt(data.data.prompt);
+          setLocalEditedPrompt(data.data.prompt);
         } else {
           setError(data.error?.message || "Failed to regenerate prompt");
         }
@@ -725,6 +771,7 @@ export default function HomePage() {
     if (version) {
       setCurrentVersionNumber(versionNumber);
       setEditedPrompt(version.englishPrompt);
+      setLocalEditedPrompt(version.englishPrompt);
       setPrompt(version.englishPrompt);
       setChinesePrompt(version.chinesePrompt);
       setVideoPrompt(version.videoPrompt || "");
@@ -1054,8 +1101,10 @@ export default function HomePage() {
         const refinedPrompt = data.data.refinedPrompt;
         setPrompt(refinedPrompt);
         setEditedPrompt(refinedPrompt);
-        const savedInstruction = refinementInput.trim();
+        setLocalEditedPrompt(refinedPrompt);
+        const savedInstruction = localRefinementInput.trim();
         setRefinementInput(""); // Clear input after success
+        setLocalRefinementInput(""); // Clear local input too
 
         // Create version FIRST (immediately)
         const newVersionNumber = createPromptVersion(refinedPrompt);
@@ -1128,6 +1177,7 @@ export default function HomePage() {
         const generatedPrompt = data.data.prompt;
         setPrompt(generatedPrompt);
         setEditedPrompt(generatedPrompt);
+        setLocalEditedPrompt(generatedPrompt);
         setProductState(data.data.productState);
         setReferenceImageUrl(data.data.referenceImageUrl);
         setCreativeName(data.data.creativeName);
@@ -1739,6 +1789,7 @@ export default function HomePage() {
                           setImages([]);
                           setCurrentVersionNumber(0);
                           setEditedPrompt("");
+                          setLocalEditedPrompt("");
                           setPrompt("");
                           setChinesePrompt("");
                           localStorage.removeItem(STORAGE_KEY_PROMPT_VERSIONS);
@@ -1768,11 +1819,8 @@ export default function HomePage() {
                       )}
                     </label>
                     <Textarea
-                      value={editedPrompt}
-                      onChange={(e) => {
-                        setEditedPrompt(e.target.value);
-                        setChinesePrompt(""); // Clear translation when prompt edited
-                      }}
+                      value={localEditedPrompt}
+                      onChange={handleEditedPromptChange}
                       rows={10}
                       className="font-mono text-sm"
                       placeholder="Edit the prompt here..."
@@ -1811,11 +1859,13 @@ export default function HomePage() {
                   <div className="flex gap-2">
                     <input
                       type="text"
-                      value={refinementInput}
-                      onChange={(e) => setRefinementInput(e.target.value)}
+                      value={localRefinementInput}
+                      onChange={handleRefinementInputChange}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey && refinementInput.trim()) {
+                        if (e.key === "Enter" && !e.shiftKey && localRefinementInput.trim()) {
                           e.preventDefault();
+                          // Sync local to main state before submitting
+                          setRefinementInput(localRefinementInput);
                           handleRefinePrompt();
                         }
                       }}
@@ -1825,7 +1875,7 @@ export default function HomePage() {
                     />
                     <Button
                       onClick={handleRefinePrompt}
-                      disabled={isRefining || !refinementInput.trim() || !editedPrompt}
+                      disabled={isRefining || !localRefinementInput.trim() || !editedPrompt}
                       className="bg-purple-600 hover:bg-purple-700"
                     >
                       {isRefining ? (
@@ -1991,11 +2041,8 @@ export default function HomePage() {
                       {/* Prompt Editor - English */}
                       <div className="flex-1">
                         <Textarea
-                          value={editedPrompt}
-                          onChange={(e) => {
-                            setEditedPrompt(e.target.value);
-                            setChinesePrompt("");
-                          }}
+                          value={localEditedPrompt}
+                          onChange={handleEditedPromptChange}
                           rows={4}
                           className="font-mono text-xs"
                           placeholder="Edit the prompt here..."
@@ -2056,11 +2103,13 @@ export default function HomePage() {
                       <div className="flex gap-2">
                         <input
                           type="text"
-                          value={refinementInput}
-                          onChange={(e) => setRefinementInput(e.target.value)}
+                          value={localRefinementInput}
+                          onChange={handleRefinementInputChange}
                           onKeyDown={(e) => {
-                            if (e.key === "Enter" && !e.shiftKey && refinementInput.trim()) {
+                            if (e.key === "Enter" && !e.shiftKey && localRefinementInput.trim()) {
                               e.preventDefault();
+                              // Sync local to main state before submitting
+                              setRefinementInput(localRefinementInput);
                               handleRefinePrompt();
                             }
                           }}
@@ -2071,7 +2120,7 @@ export default function HomePage() {
                         <Button
                           size="sm"
                           onClick={handleRefinePrompt}
-                          disabled={isRefining || !refinementInput.trim() || !editedPrompt}
+                          disabled={isRefining || !localRefinementInput.trim() || !editedPrompt}
                           className="bg-purple-600 hover:bg-purple-700 h-9"
                         >
                           {isRefining ? (
