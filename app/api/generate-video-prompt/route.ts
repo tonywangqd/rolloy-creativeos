@@ -14,8 +14,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 // ============================================================================
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-// Use gemini-3-pro-preview for high-quality video prompt generation
-const VIDEO_PROMPT_MODEL = 'gemini-3-pro-preview';
+// Use gemini-3-pro-image-preview for video prompt generation
+const VIDEO_PROMPT_MODEL = 'gemini-3-pro-image-preview';
 
 // ============================================================================
 // Types

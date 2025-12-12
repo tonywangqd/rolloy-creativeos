@@ -19,8 +19,8 @@ import type { ABCDContexts } from '@/lib/services/abcd-context-service';
 // ============================================================================
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || 'gemini-2.0-flash-exp';
-const IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.0-flash-exp';
+const TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || 'gemini-3-pro-preview';
+const IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-3-pro-image-preview';
 
 // Reference images
 const UNFOLDED_IMAGE_URL = process.env.NEXT_PUBLIC_UNFOLDED_IMAGE_URL || '';

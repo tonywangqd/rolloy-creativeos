@@ -14,7 +14,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 // ============================================================================
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || 'gemini-2.0-flash-exp';
+const TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || 'gemini-3-pro-preview';
 
 // ============================================================================
 // Types
