@@ -334,9 +334,15 @@ ${scaleNegativePrompt}
 CRITICAL INSTRUCTIONS:
 1. PRODUCT PRESERVATION: The red 'Rolloy Compact Master' rollator must be rendered EXACTLY as shown in the reference image - same design, color, and components. No modifications.
 2. SCALE ACCURACY: Maintain realistic proportions - the product size relative to humans must match real-world scale. Follow the MANDATORY SCALE CONSTRAINT above strictly.
-3. VARIATION: This is variation ${imageIndex + 1} of ${totalImages} - create a unique scene with different camera angle, lighting, or composition.
-4. ASPECT RATIO: Output in ${aspectRatio} format.
-5. QUALITY: Commercial photography style, Photorealistic, Ultra high definition (UHD), professional lighting.`;
+3. COMPOSITION - SAFE ZONE FOR TEXT OVERLAY:
+   - TOP 30%: Leave the top 30% of the image as "breathing space" - show background, sky, ceiling, or environment elements. Do NOT place the subject's head, face, or product in this zone. This area will be used for advertising copy overlay.
+   - BOTTOM 5%: Leave a small margin at the bottom edge.
+   - LEFT 5% and RIGHT 5%: Leave small margins on both sides.
+   - SAFE ZONE: Position the main subject (person + product) within the central safe zone: from 30% to 95% vertically, and from 5% to 95% horizontally.
+   - This ensures the human subject and product are framed lower in the image, with clean space above for text.
+4. VARIATION: This is variation ${imageIndex + 1} of ${totalImages} - create a unique scene with different camera angle, lighting, or composition while respecting the safe zone.
+5. ASPECT RATIO: Output in ${aspectRatio} format.
+6. QUALITY: Commercial photography style, Photorealistic, Ultra high definition (UHD), professional lighting.`;
 
     console.log(`Generating ${resolution} image with aspect ratio ${aspectRatio}...`);
 
