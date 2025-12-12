@@ -135,18 +135,58 @@ async function updateImageRecord(
   promptVersionId?: string
 ): Promise<boolean> {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    console.error('[updateImageRecord] Missing Supabase config');
     return false;
   }
+
+  const dbImageIndex = imageIndex + 1; // image_index is 1-based in DB
 
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // Build upsert data - include all fields needed for insert
-    const upsertData: Record<string, unknown> = {
+    // Build update data
+    const updateData: Record<string, unknown> = {
+      status: 'success',
+      storage_url: storageUrl,
+      storage_path: storagePath,
+      generated_at: new Date().toISOString(),
+      aspect_ratio: aspectRatio,
+      resolution: resolution,
+    };
+
+    // Link to prompt version if provided
+    if (promptVersionId) {
+      updateData.prompt_version_id = promptVersionId;
+    }
+
+    console.log(`[updateImageRecord] Attempting UPDATE for session=${sessionId}, image=${dbImageIndex}`);
+
+    // Step 1: Try to UPDATE existing record
+    const { data: updateResult, error: updateError } = await supabase
+      .from('generated_images_v2')
+      .update(updateData)
+      .eq('session_id', sessionId)
+      .eq('image_index', dbImageIndex)
+      .select('id');
+
+    if (updateError) {
+      console.error(`[updateImageRecord] UPDATE error:`, updateError.message);
+    }
+
+    // Check if UPDATE affected any rows
+    if (updateResult && updateResult.length > 0) {
+      console.log(`[updateImageRecord] UPDATE SUCCESS: session=${sessionId}, image=${dbImageIndex}, versionId=${promptVersionId || 'none'}`);
+      return true;
+    }
+
+    // Step 2: No existing record, INSERT new one
+    console.log(`[updateImageRecord] No existing record found, attempting INSERT for image=${dbImageIndex}`);
+
+    const insertData: Record<string, unknown> = {
       session_id: sessionId,
-      image_index: imageIndex + 1, // image_index is 1-based in DB
+      image_index: dbImageIndex,
       status: 'success',
       storage_url: storageUrl,
       storage_path: storagePath,
@@ -158,26 +198,20 @@ async function updateImageRecord(
       retry_count: 0,
     };
 
-    // Link to prompt version if provided
     if (promptVersionId) {
-      upsertData.prompt_version_id = promptVersionId;
+      insertData.prompt_version_id = promptVersionId;
     }
 
-    // UPSERT: Update if exists, INSERT if not
-    // This fixes the issue where V2+ image records didn't exist
-    const { error } = await supabase
+    const { error: insertError } = await supabase
       .from('generated_images_v2')
-      .upsert(upsertData, {
-        onConflict: 'session_id,image_index',
-        ignoreDuplicates: false, // Update on conflict
-      });
+      .insert(insertData);
 
-    if (error) {
-      console.error(`[updateImageRecord] FAILED for image ${imageIndex + 1}:`, error.message);
+    if (insertError) {
+      console.error(`[updateImageRecord] INSERT FAILED:`, insertError.message);
       return false;
     }
 
-    console.log(`[updateImageRecord] SUCCESS: session=${sessionId}, image=${imageIndex + 1}, versionId=${promptVersionId || 'none'}`);
+    console.log(`[updateImageRecord] INSERT SUCCESS: session=${sessionId}, image=${dbImageIndex}, versionId=${promptVersionId || 'none'}`);
     return true;
   } catch (error) {
     console.error('[updateImageRecord] EXCEPTION:', error);
