@@ -677,16 +677,19 @@ export default function HomePage() {
   // ============================================================================
 
   // Save a prompt version to cloud (called after session is created)
+  // IMPORTANT: Pass versionNumber so we can update state with cloudId
   const syncVersionToCloud = async (
     sessionId: string,
     versionData: {
       prompt: string;
       prompt_chinese?: string;
+      video_prompt?: string;
       product_state: string;
       reference_image_url: string;
       created_from: "initial" | "refinement" | "product_state_change";
       refinement_instruction?: string;
-    }
+    },
+    versionNumber?: number
   ): Promise<string | null> => {
     try {
       const response = await fetch(`/api/sessions/${sessionId}/versions`, {
@@ -696,8 +699,21 @@ export default function HomePage() {
       });
       const data = await response.json();
       if (data.success && data.data?.version?.id) {
-        console.log(`Synced version to cloud: ${data.data.version_number}`);
-        return data.data.version.id;
+        const cloudId = data.data.version.id;
+        const syncedVersionNumber = data.data.version_number || versionNumber;
+        console.log(`Synced version V${syncedVersionNumber} to cloud: ${cloudId}`);
+
+        // CRITICAL FIX: Update local state with cloudId so that
+        // updateCloudVersionChinese and updateCloudVersionVideoPrompt can find it
+        if (syncedVersionNumber) {
+          setPromptVersions(prev => prev.map(v =>
+            v.version === syncedVersionNumber
+              ? { ...v, cloudId, synced: true }
+              : v
+          ));
+        }
+
+        return cloudId;
       }
       console.warn("Failed to sync version to cloud:", data.error);
       return null;
@@ -933,6 +949,7 @@ export default function HomePage() {
         translatePromptInBackground(refinedPrompt, newVersionNumber);
 
         // Sync to cloud if we have a session
+        // Pass versionNumber so syncVersionToCloud can update state with cloudId
         if (currentSessionId) {
           syncVersionToCloud(currentSessionId, {
             prompt: refinedPrompt,
@@ -940,33 +957,24 @@ export default function HomePage() {
             reference_image_url: referenceImageUrl,
             created_from: "refinement",
             refinement_instruction: savedInstruction,
-          }).then(cloudId => {
+          }, newVersionNumber).then(cloudId => {
+            // syncVersionToCloud now updates state with cloudId automatically
+            // Also sync pending Chinese if ready
             if (cloudId) {
-              // Update local version with cloud ID and sync pending Chinese translation
-              setPromptVersions(prev => {
-                const updatedVersions = prev.map(v =>
-                  v.version === newVersionNumber
-                    ? { ...v, cloudId, synced: true }
-                    : v
-                );
-                // Check if Chinese translation is ready and sync it
-                const version = updatedVersions.find(v => v.version === newVersionNumber);
-                if (version?.chinesePrompt) {
-                  // Sync Chinese translation in next tick after state update
-                  setTimeout(() => {
-                    fetch(`/api/sessions/${currentSessionId}/versions/${cloudId}`, {
-                      method: "PATCH",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ prompt_chinese: version.chinesePrompt }),
-                    }).then(() => {
-                      console.log(`Synced pending Chinese for V${newVersionNumber}`);
-                    }).catch(err => {
-                      console.error("Failed to sync pending Chinese:", err);
-                    });
-                  }, 100);
-                }
-                return updatedVersions;
-              });
+              const version = promptVersions.find(v => v.version === newVersionNumber);
+              if (version?.chinesePrompt) {
+                setTimeout(() => {
+                  fetch(`/api/sessions/${currentSessionId}/versions/${cloudId}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ prompt_chinese: version.chinesePrompt }),
+                  }).then(() => {
+                    console.log(`Synced pending Chinese for V${newVersionNumber}`);
+                  }).catch(err => {
+                    console.error("Failed to sync pending Chinese:", err);
+                  });
+                }, 100);
+              }
             }
           });
         }
@@ -1059,23 +1067,15 @@ export default function HomePage() {
     // Need to sync to cloud and wait for it
     console.log(`V${version.version} needs to be synced to cloud before generating images...`);
 
+    // syncVersionToCloud now updates state with cloudId automatically
     const cloudId = await syncVersionToCloud(sessionId, {
       prompt: version.englishPrompt,
       prompt_chinese: version.chinesePrompt,
+      video_prompt: version.videoPrompt,
       product_state: productState,
       reference_image_url: referenceImageUrl,
       created_from: "initial",
-    });
-
-    if (cloudId) {
-      // Update local version with cloud ID
-      setPromptVersions(prev => prev.map(v =>
-        v.version === version.version
-          ? { ...v, cloudId, synced: true }
-          : v
-      ));
-      console.log(`V${version.version} synced to cloud: ${cloudId}`);
-    }
+    }, version.version);
 
     return cloudId;
   };
@@ -1102,43 +1102,35 @@ export default function HomePage() {
       }
 
       // Sync V1 to cloud after session is created
+      // Pass versionNumber so syncVersionToCloud updates state with cloudId
       const currentVersion = promptVersions.find(v => v.version === currentVersionNumber);
       if (currentVersion && !currentVersion.synced) {
         const versionToSync = currentVersionNumber; // Capture for closure
         syncVersionToCloud(activeSessionId, {
           prompt: currentVersion.englishPrompt,
           prompt_chinese: currentVersion.chinesePrompt,
+          video_prompt: currentVersion.videoPrompt,
           product_state: productState,
           reference_image_url: referenceImageUrl,
           created_from: "initial",
-        }).then(cloudId => {
+        }, versionToSync).then(cloudId => {
+          // syncVersionToCloud now updates state with cloudId automatically
+          // Check if Chinese translation completed after sync started
           if (cloudId) {
-            // Update local version with cloud ID
-            setPromptVersions(prev => {
-              const updatedVersions = prev.map(v =>
-                v.version === versionToSync
-                  ? { ...v, cloudId, synced: true }
-                  : v
-              );
-              // Check if Chinese translation completed after sync started
-              const version = updatedVersions.find(v => v.version === versionToSync);
-              if (version?.chinesePrompt && !currentVersion.chinesePrompt) {
-                // Translation completed after sync, update cloud
-                setTimeout(() => {
-                  fetch(`/api/sessions/${activeSessionId}/versions/${cloudId}`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ prompt_chinese: version.chinesePrompt }),
-                  }).then(() => {
-                    console.log(`Synced late Chinese for V${versionToSync}`);
-                  }).catch(err => {
-                    console.error("Failed to sync late Chinese:", err);
-                  });
-                }, 100);
-              }
-              return updatedVersions;
-            });
-            console.log(`Synced V${versionToSync} to cloud`);
+            const version = promptVersions.find(v => v.version === versionToSync);
+            if (version?.chinesePrompt && !currentVersion.chinesePrompt) {
+              setTimeout(() => {
+                fetch(`/api/sessions/${activeSessionId}/versions/${cloudId}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ prompt_chinese: version.chinesePrompt }),
+                }).then(() => {
+                  console.log(`Synced late Chinese for V${versionToSync}`);
+                }).catch(err => {
+                  console.error("Failed to sync late Chinese:", err);
+                });
+              }, 100);
+            }
           }
         });
       }

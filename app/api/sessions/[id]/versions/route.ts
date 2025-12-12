@@ -150,6 +150,7 @@ export async function POST(
       session_id: sessionId,
       prompt: body.prompt,
       prompt_chinese: body.prompt_chinese,
+      video_prompt: body.video_prompt,
       product_state: body.product_state,
       reference_image_url: body.reference_image_url,
       created_from: body.created_from,
