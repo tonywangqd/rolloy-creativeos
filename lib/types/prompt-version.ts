@@ -20,6 +20,7 @@ export interface PromptVersion {
   // Prompt Content
   prompt: string;
   prompt_chinese?: string;
+  video_prompt?: string;  // Video generation prompt (derived from image prompt)
 
   // Generation Parameters (snapshot at this version)
   product_state: 'FOLDED' | 'UNFOLDED';
@@ -60,6 +61,7 @@ export interface CreatePromptVersionRequest {
   session_id: string;
   prompt: string;
   prompt_chinese?: string;
+  video_prompt?: string;
   product_state: 'FOLDED' | 'UNFOLDED';
   reference_image_url: string;
   created_from: 'initial' | 'refinement' | 'product_state_change';

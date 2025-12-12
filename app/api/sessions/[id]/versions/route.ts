@@ -41,6 +41,7 @@ export async function GET(
         version_number: v.version_number,
         prompt: v.prompt, // Include full prompt for cross-device sync
         prompt_chinese: v.prompt_chinese, // Include Chinese translation
+        video_prompt: v.video_prompt, // Include video prompt
         product_state: v.product_state,
         reference_image_url: v.reference_image_url,
         created_from: v.created_from,

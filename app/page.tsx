@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef, useTransition, useMemo, memo } from "react";
-import { Sparkles, Eye, ImageIcon, RefreshCw, Copy, Check, Loader2, StopCircle, Cloud, Play, Pause, Star, Plus, Download, ZoomIn, Trash2, ChevronDown, ChevronUp, Pencil, Wand2, Send, Languages, History, RotateCcw } from "lucide-react";
+import { Sparkles, Eye, ImageIcon, RefreshCw, Copy, Check, Loader2, StopCircle, Cloud, Play, Pause, Star, Plus, Download, ZoomIn, Trash2, ChevronDown, ChevronUp, Pencil, Wand2, Send, Languages, History, RotateCcw, Film } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -21,6 +21,7 @@ interface PromptVersion {
   version: number;
   englishPrompt: string;
   chinesePrompt: string;
+  videoPrompt: string;  // Video generation prompt
   createdAt: string;
   // Cloud sync fields
   cloudId?: string; // UUID from Supabase prompt_versions table
@@ -89,6 +90,10 @@ export default function HomePage() {
 
   // Prompt translation state
   const [chinesePrompt, setChinesePrompt] = useState("");
+
+  // Video prompt state
+  const [videoPrompt, setVideoPrompt] = useState("");
+  const [isGeneratingVideoPrompt, setIsGeneratingVideoPrompt] = useState(false);
 
   // Prompt version management - per session (simple array)
   const [promptVersions, setPromptVersions] = useState<PromptVersion[]>([]);
@@ -181,6 +186,7 @@ export default function HomePage() {
             setEditedPrompt(currentVersion.englishPrompt);
             setPrompt(currentVersion.englishPrompt);
             setChinesePrompt(currentVersion.chinesePrompt || "");
+            setVideoPrompt(currentVersion.videoPrompt || "");
             setCurrentVersionNumber(currentVersion.version);
             setStep("prompt");
           }
@@ -410,6 +416,7 @@ export default function HomePage() {
           setEditedPrompt(activeVersion.englishPrompt);
           setPrompt(activeVersion.englishPrompt);
           setChinesePrompt(activeVersion.chinesePrompt);
+          setVideoPrompt(activeVersion.videoPrompt || "");
           console.log(`Restored ${cloudVersions.length} versions from cloud, active: V${activeVersion.version}`);
         } else {
           // Fallback: create V1 from session prompt if no cloud versions
@@ -418,11 +425,13 @@ export default function HomePage() {
             version: 1,
             englishPrompt: sessionDetail.prompt,
             chinesePrompt: "",
+            videoPrompt: "",
             createdAt: sessionDetail.created_at,
             synced: false,
           };
           setPromptVersions([fallbackVersion]);
           setCurrentVersionNumber(1);
+          setVideoPrompt("");
           console.log("No cloud versions found, created fallback V1");
         }
 
@@ -562,10 +571,14 @@ export default function HomePage() {
     setStep("select");
     setPrompt("");
     setEditedPrompt("");
+    setChinesePrompt("");
+    setVideoPrompt("");
     setImages([]);
     setError("");
     shouldStopRef.current = false;
     setCurrentImageIndex(0);
+    setPromptVersions([]);
+    setCurrentVersionNumber(0);
   };
 
   // Handle Product State change with Prompt regeneration
@@ -627,11 +640,13 @@ export default function HomePage() {
       version: newVersionNumber,
       englishPrompt: englishText,
       chinesePrompt: chineseText,
+      videoPrompt: "",  // New versions start without video prompt
       createdAt: new Date().toISOString(),
     };
 
     setPromptVersions(prev => [...prev, newVersion]);
     setCurrentVersionNumber(newVersionNumber);
+    setVideoPrompt("");  // Clear video prompt for new version
 
     console.log(`Created version V${newVersionNumber}`);
     return newVersionNumber;
@@ -653,6 +668,7 @@ export default function HomePage() {
       setEditedPrompt(version.englishPrompt);
       setPrompt(version.englishPrompt);
       setChinesePrompt(version.chinesePrompt);
+      setVideoPrompt(version.videoPrompt || "");
     }
   };
 
@@ -703,6 +719,7 @@ export default function HomePage() {
           version: v.version_number,
           englishPrompt: v.prompt,
           chinesePrompt: v.prompt_chinese || "",
+          videoPrompt: v.video_prompt || "",
           createdAt: v.created_at,
           cloudId: v.id,
           synced: true,
@@ -757,6 +774,99 @@ export default function HomePage() {
       }
     } catch (err) {
       console.error("Failed to update cloud version Chinese:", err);
+    }
+  };
+
+  // Update video prompt in cloud (with retry for pending sync)
+  const updateCloudVersionVideoPrompt = async (
+    sessionId: string,
+    versionNumber: number,
+    videoPromptText: string,
+    retryCount: number = 0
+  ) => {
+    const MAX_RETRIES = 5;
+    const RETRY_DELAY_MS = 1000;
+
+    // Find the cloud version ID from current state
+    const version = promptVersions.find(v => v.version === versionNumber);
+
+    if (!version?.cloudId) {
+      // cloudId not yet available, retry after delay
+      if (retryCount < MAX_RETRIES) {
+        console.log(`V${versionNumber} cloudId not ready for video prompt, retrying in ${RETRY_DELAY_MS}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+        setTimeout(() => {
+          updateCloudVersionVideoPrompt(sessionId, versionNumber, videoPromptText, retryCount + 1);
+        }, RETRY_DELAY_MS);
+        return;
+      }
+      console.warn(`V${versionNumber} cloudId still not available after ${MAX_RETRIES} retries, giving up`);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}/versions/${version.cloudId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ video_prompt: videoPromptText }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        console.log(`Updated video prompt for V${versionNumber} in cloud`);
+      } else {
+        console.warn("Failed to update cloud video prompt:", data.error);
+      }
+    } catch (err) {
+      console.error("Failed to update cloud version video prompt:", err);
+    }
+  };
+
+  // Update version's video prompt locally
+  const updateVersionVideoPrompt = (versionNumber: number, videoPromptText: string) => {
+    setPromptVersions(prev => prev.map(v =>
+      v.version === versionNumber
+        ? { ...v, videoPrompt: videoPromptText }
+        : v
+    ));
+  };
+
+  // Handle Generate Video Prompt
+  const handleGenerateVideoPrompt = async () => {
+    if (!editedPrompt) {
+      setError("请先生成或选择一个Prompt");
+      return;
+    }
+
+    setIsGeneratingVideoPrompt(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/generate-video-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imagePrompt: editedPrompt }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        const generatedVideoPrompt = data.data.videoPrompt;
+        setVideoPrompt(generatedVideoPrompt);
+
+        // Update the current version's video prompt locally
+        updateVersionVideoPrompt(currentVersionNumber, generatedVideoPrompt);
+
+        // Also update in cloud if session exists
+        if (currentSessionId) {
+          updateCloudVersionVideoPrompt(currentSessionId, currentVersionNumber, generatedVideoPrompt);
+        }
+      } else {
+        setError(data.error?.message || "生成Video Prompt失败");
+      }
+    } catch (err) {
+      setError("网络错误，请重试");
+      console.error("Generate video prompt failed:", err);
+    } finally {
+      setIsGeneratingVideoPrompt(false);
     }
   };
 
@@ -918,10 +1028,12 @@ export default function HomePage() {
           version: 1,
           englishPrompt: generatedPrompt,
           chinesePrompt: "",
+          videoPrompt: "",
           createdAt: new Date().toISOString(),
         };
         setPromptVersions([newVersion]); // Replace with single V1
         setCurrentVersionNumber(1);
+        setVideoPrompt("");  // Clear video prompt for new version
         console.log("Created version V1 for new session");
 
         // Translate in background and update V1's Chinese
@@ -1730,6 +1842,35 @@ export default function HomePage() {
                       </p>
                     </div>
 
+                    {/* Video Prompt - Display when available */}
+                    <div className="p-2 bg-gradient-to-r from-orange-500/10 to-red-500/10 rounded-lg border border-orange-500/20">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Film className="h-3 w-3 text-orange-500" />
+                        <span className="text-xs font-medium">Video Prompt</span>
+                        {isGeneratingVideoPrompt && <Loader2 className="h-3 w-3 animate-spin text-orange-500" />}
+                        {videoPrompt && (
+                          <button
+                            className="ml-auto p-1 hover:bg-orange-500/20 rounded transition-colors"
+                            onClick={() => {
+                              navigator.clipboard.writeText(videoPrompt);
+                              setCopied(true);
+                              setTimeout(() => setCopied(false), 2000);
+                            }}
+                            title="复制Video Prompt"
+                          >
+                            {copied ? (
+                              <Check className="h-3 w-3 text-green-500" />
+                            ) : (
+                              <Copy className="h-3 w-3 text-orange-500" />
+                            )}
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-xs leading-relaxed whitespace-pre-wrap">
+                        {videoPrompt || (isGeneratingVideoPrompt ? "正在生成Video Prompt..." : "点击上方\"Video Prompt\"按钮生成")}
+                      </p>
+                    </div>
+
                     {/* Prompt Refinement - Compact version for Generate step */}
                     <div className="p-3 bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-lg border border-purple-500/20">
                       <div className="flex items-center gap-2 mb-2">
@@ -1802,6 +1943,25 @@ export default function HomePage() {
                         </select>
                       </div>
                       <div className="flex-1" />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleGenerateVideoPrompt}
+                        disabled={isGeneratingVideoPrompt || !editedPrompt}
+                        className="border-orange-500/50 text-orange-600 hover:bg-orange-500/10"
+                      >
+                        {isGeneratingVideoPrompt ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            生成中...
+                          </>
+                        ) : (
+                          <>
+                            <Film className="mr-2 h-4 w-4" />
+                            Video Prompt
+                          </>
+                        )}
+                      </Button>
                       <Button
                         size="sm"
                         onClick={handleGenerateBatch}

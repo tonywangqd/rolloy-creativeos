@@ -1,6 +1,6 @@
 /**
  * Rolloy Creative OS - Version Detail API
- * PATCH /api/sessions/{id}/versions/{versionId} - Update version (e.g., Chinese translation)
+ * PATCH /api/sessions/{id}/versions/{versionId} - Update version (e.g., Chinese translation, video prompt)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase/client';
 import type { APIResponse } from '@/lib/types';
 
 // ============================================================================
-// PATCH - Update Version (Chinese translation)
+// PATCH - Update Version (Chinese translation, video prompt)
 // ============================================================================
 
 export async function PATCH(
@@ -20,15 +20,16 @@ export async function PATCH(
     const versionId = params.versionId;
     const body = await request.json();
 
-    const { prompt_chinese } = body;
+    const { prompt_chinese, video_prompt } = body;
 
-    if (prompt_chinese === undefined) {
+    // At least one field must be provided
+    if (prompt_chinese === undefined && video_prompt === undefined) {
       return NextResponse.json<APIResponse>(
         {
           success: false,
           error: {
             code: 'INVALID_REQUEST',
-            message: 'Missing prompt_chinese field',
+            message: 'At least one of prompt_chinese or video_prompt must be provided',
           },
         },
         { status: 400 }
@@ -56,10 +57,19 @@ export async function PATCH(
       );
     }
 
-    // Update the Chinese translation
+    // Build update object with only provided fields
+    const updateData: Record<string, string> = {};
+    if (prompt_chinese !== undefined) {
+      updateData.prompt_chinese = prompt_chinese;
+    }
+    if (video_prompt !== undefined) {
+      updateData.video_prompt = video_prompt;
+    }
+
+    // Update the version
     const { data: updatedVersion, error: updateError } = await supabase
       .from('prompt_versions')
-      .update({ prompt_chinese })
+      .update(updateData)
       .eq('id', versionId)
       .select()
       .single();

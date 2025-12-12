@@ -59,6 +59,7 @@ export async function createPromptVersion(
         version_number: nextVersionNumber,
         prompt: data.prompt,
         prompt_chinese: data.prompt_chinese,
+        video_prompt: data.video_prompt,
         product_state: data.product_state,
         reference_image_url: data.reference_image_url,
         created_from: data.created_from,
