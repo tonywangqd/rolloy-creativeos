@@ -1175,14 +1175,21 @@ export default function HomePage() {
 
     // IMPORTANT: Ensure current version is synced to cloud before generating images
     // This fixes the bug where V2-V4 images were not saved with version info
-    const currentVersion = promptVersions.find(v => v.version === currentVersionNumber);
+    // Use promptVersionsRef.current to get latest state (avoids stale closure)
+    const currentVersion = promptVersionsRef.current.find(v => v.version === currentVersionNumber);
     let versionCloudId: string | null = null;
+
+    console.log(`[handleGenerateBatch] Looking for V${currentVersionNumber}, found:`, currentVersion ? `cloudId=${currentVersion.cloudId || 'none'}` : 'not found');
 
     if (currentVersion) {
       versionCloudId = await ensureVersionCloudId(activeSessionId, currentVersion);
-      if (!versionCloudId) {
-        console.warn(`Failed to sync V${currentVersionNumber} to cloud, images will not be linked to version`);
+      if (versionCloudId) {
+        console.log(`[handleGenerateBatch] V${currentVersionNumber} has cloudId: ${versionCloudId}, images will be linked`);
+      } else {
+        console.warn(`[handleGenerateBatch] Failed to get cloudId for V${currentVersionNumber}, images will NOT be linked to version`);
       }
+    } else {
+      console.warn(`[handleGenerateBatch] V${currentVersionNumber} not found in promptVersionsRef`);
     }
 
     // Add pending images for this batch (with current settings and version)
@@ -1230,6 +1237,7 @@ export default function HomePage() {
         const data = await response.json();
 
         if (data.success && data.data.imageUrl) {
+          console.log(`[generateSingleImage] Image ${globalIndex + 1} SUCCESS, versionId=${versionCloudId || 'none'}, storageUrl=${data.data.storageUrl ? 'YES' : 'NO'}`);
           setImages(prev => prev.map((img, idx) =>
             idx === globalIndex ? {
               ...img,

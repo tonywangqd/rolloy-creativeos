@@ -198,6 +198,8 @@ export async function POST(request: NextRequest) {
       productState = "UNFOLDED"
     } = body;
 
+    console.log(`[generate-single] Request: imageIndex=${imageIndex}, sessionId=${sessionId}, promptVersionId=${promptVersionId || 'none'}`);
+
     // Build scale instruction based on product state
     // Using specific measurements instead of subjective size words for better AI interpretation
     const scaleInstruction = productState === "FOLDED"
