@@ -106,6 +106,9 @@ export default function HomePage() {
   // Use ref to track latest promptVersions (avoids stale closure issues in setTimeout retries)
   const promptVersionsRef = useRef<PromptVersion[]>([]);
 
+  // Use ref to track latest sessionId (avoids stale closure issues)
+  const currentSessionIdRef = useRef<string | null>(null);
+
   // Lightbox state
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -143,6 +146,11 @@ export default function HomePage() {
   useEffect(() => {
     promptVersionsRef.current = promptVersions;
   }, [promptVersions]);
+
+  // Keep currentSessionIdRef in sync with currentSessionId state
+  useEffect(() => {
+    currentSessionIdRef.current = currentSessionId;
+  }, [currentSessionId]);
 
   // Load persisted data from localStorage on mount
   useEffect(() => {
@@ -184,8 +192,10 @@ export default function HomePage() {
       // Restore prompt versions for current session
       if (savedVersions) {
         const versions = JSON.parse(savedVersions) as PromptVersion[];
+        // CRITICAL: Update ref immediately, then state
+        promptVersionsRef.current = versions;
         setPromptVersions(versions);
-        console.log("Loaded prompt versions:", versions.length);
+        console.log("Loaded prompt versions from localStorage:", versions.length);
 
         if (versions.length > 0) {
           const savedVersionNum = savedSessionData ? JSON.parse(savedSessionData).currentVersionNumber : versions.length;
@@ -341,9 +351,13 @@ export default function HomePage() {
 
       const data = await response.json();
       if (data.success) {
-        setCurrentSessionId(data.data.session.id);
+        const newSessionId = data.data.session.id;
+        // CRITICAL: Update ref immediately, then state
+        currentSessionIdRef.current = newSessionId;
+        setCurrentSessionId(newSessionId);
+        console.log(`[createSession] Created session: ${newSessionId}`);
         await loadSessions();
-        return data.data.session.id;
+        return newSessionId;
       } else {
         console.error("Session creation failed:", data.error);
         setError(data.error?.message || "创建会话失败");
@@ -378,7 +392,10 @@ export default function HomePage() {
       if (data.success) {
         const sessionDetail = data.data;
 
+        // CRITICAL: Update ref immediately, then state
+        currentSessionIdRef.current = session.id;
         setCurrentSessionId(session.id);
+        console.log(`[loadSession] Loading session: ${session.id}`);
         setSelection({
           sceneCategory: sessionDetail.abcd_selection.A1,
           sceneDetail: sessionDetail.abcd_selection.A2,
@@ -429,6 +446,8 @@ export default function HomePage() {
         setImages(restoredImages);
 
         if (cloudVersions.length > 0) {
+          // CRITICAL: Update ref immediately, then state
+          promptVersionsRef.current = cloudVersions;
           setPromptVersions(cloudVersions);
           // Find active version or use latest
           const activeVersion = cloudVersions.find(v => v.synced) || cloudVersions[cloudVersions.length - 1];
@@ -437,7 +456,7 @@ export default function HomePage() {
           setPrompt(activeVersion.englishPrompt);
           setChinesePrompt(activeVersion.chinesePrompt);
           setVideoPrompt(activeVersion.videoPrompt || "");
-          console.log(`Restored ${cloudVersions.length} versions from cloud, active: V${activeVersion.version}`);
+          console.log(`[loadSession] Restored ${cloudVersions.length} versions from cloud, active: V${activeVersion.version}`);
         } else {
           // Fallback: create V1 from session prompt if no cloud versions
           const fallbackVersion: PromptVersion = {
@@ -449,10 +468,12 @@ export default function HomePage() {
             createdAt: sessionDetail.created_at,
             synced: false,
           };
+          // CRITICAL: Update ref immediately, then state
+          promptVersionsRef.current = [fallbackVersion];
           setPromptVersions([fallbackVersion]);
           setCurrentVersionNumber(1);
           setVideoPrompt("");
-          console.log("No cloud versions found, created fallback V1");
+          console.log("[loadSession] No cloud versions found, created fallback V1");
         }
 
         if (sessionDetail.status === "draft") {
@@ -580,7 +601,10 @@ export default function HomePage() {
 
   // Start a new session
   const handleNewSession = () => {
+    // CRITICAL: Update ref immediately, then state
+    currentSessionIdRef.current = null;
     setCurrentSessionId(null);
+    console.log("[handleNewSession] Starting new session");
     setSelection({
       sceneCategory: "",
       sceneDetail: "",
@@ -597,6 +621,9 @@ export default function HomePage() {
     setError("");
     shouldStopRef.current = false;
     setCurrentImageIndex(0);
+    // CRITICAL: Update ref immediately, then state
+    promptVersionsRef.current = [];
+    currentSessionIdRef.current = null;
     setPromptVersions([]);
     setCurrentVersionNumber(0);
   };
@@ -652,8 +679,10 @@ export default function HomePage() {
   };
 
   // Create a new prompt version for current session
+  // CRITICAL: Also updates ref immediately for synchronous access
   const createPromptVersion = (englishText: string, chineseText: string = ""): number => {
-    const newVersionNumber = promptVersions.length + 1;
+    // Use ref to get latest count (avoids stale closure)
+    const newVersionNumber = promptVersionsRef.current.length + 1;
 
     const newVersion: PromptVersion = {
       id: `v${newVersionNumber}-${Date.now()}`,
@@ -664,6 +693,10 @@ export default function HomePage() {
       createdAt: new Date().toISOString(),
     };
 
+    // Update ref immediately (synchronous)
+    promptVersionsRef.current = [...promptVersionsRef.current, newVersion];
+
+    // Update state (async)
     setPromptVersions(prev => [...prev, newVersion]);
     setCurrentVersionNumber(newVersionNumber);
     setVideoPrompt("");  // Clear video prompt for new version
@@ -673,8 +706,14 @@ export default function HomePage() {
   };
 
   // Update Chinese translation for a specific version
+  // CRITICAL: Also updates ref immediately for synchronous access
   const updateVersionChinesePrompt = (versionNumber: number, chineseText: string) => {
     if (versionNumber <= 0) return;
+    // Update ref immediately (synchronous)
+    promptVersionsRef.current = promptVersionsRef.current.map(v =>
+      v.version === versionNumber ? { ...v, chinesePrompt: chineseText } : v
+    );
+    // Update state (async)
     setPromptVersions(prev =>
       prev.map(v => v.version === versionNumber ? { ...v, chinesePrompt: chineseText } : v)
     );
@@ -727,9 +766,18 @@ export default function HomePage() {
         const syncedVersionNumber = data.data.version_number || versionNumber;
         console.log(`[syncVersionToCloud] SUCCESS: V${syncedVersionNumber} synced with cloudId: ${cloudId}`);
 
-        // CRITICAL FIX: Update local state with cloudId so that
-        // updateCloudVersionChinese and updateCloudVersionVideoPrompt can find it
+        // CRITICAL FIX: Update BOTH state AND ref immediately so that
+        // updateCloudVersionChinese and updateCloudVersionVideoPrompt can find cloudId
         if (syncedVersionNumber) {
+          // Update ref IMMEDIATELY (synchronous) so it's available right away
+          promptVersionsRef.current = promptVersionsRef.current.map(v =>
+            v.version === syncedVersionNumber
+              ? { ...v, cloudId, synced: true }
+              : v
+          );
+          console.log(`[syncVersionToCloud] Updated ref for V${syncedVersionNumber} with cloudId: ${cloudId}`);
+
+          // Also update state (async, will trigger re-render)
           setPromptVersions(prev => prev.map(v =>
             v.version === syncedVersionNumber
               ? { ...v, cloudId, synced: true }
@@ -878,7 +926,15 @@ export default function HomePage() {
   };
 
   // Update version's video prompt locally
+  // CRITICAL: Also updates ref immediately for synchronous access
   const updateVersionVideoPrompt = (versionNumber: number, videoPromptText: string) => {
+    // Update ref immediately (synchronous)
+    promptVersionsRef.current = promptVersionsRef.current.map(v =>
+      v.version === versionNumber
+        ? { ...v, videoPrompt: videoPromptText }
+        : v
+    );
+    // Update state (async)
     setPromptVersions(prev => prev.map(v =>
       v.version === versionNumber
         ? { ...v, videoPrompt: videoPromptText }
@@ -887,6 +943,7 @@ export default function HomePage() {
   };
 
   // Handle Generate Video Prompt
+  // IMPORTANT: Uses refs to get latest sessionId (avoids stale closure issues)
   const handleGenerateVideoPrompt = async () => {
     if (!editedPrompt) {
       setError("请先生成或选择一个Prompt");
@@ -895,6 +952,7 @@ export default function HomePage() {
 
     setIsGeneratingVideoPrompt(true);
     setError("");
+    console.log(`[handleGenerateVideoPrompt] Generating video prompt for V${currentVersionNumber}...`);
 
     try {
       const response = await fetch("/api/generate-video-prompt", {
@@ -911,10 +969,16 @@ export default function HomePage() {
 
         // Update the current version's video prompt locally
         updateVersionVideoPrompt(currentVersionNumber, generatedVideoPrompt);
+        console.log(`[handleGenerateVideoPrompt] V${currentVersionNumber} video prompt saved locally`);
 
         // Also update in cloud if session exists
-        if (currentSessionId) {
-          updateCloudVersionVideoPrompt(currentSessionId, currentVersionNumber, generatedVideoPrompt);
+        // CRITICAL: Use ref to get latest sessionId (avoids stale closure)
+        const sessionId = currentSessionIdRef.current;
+        if (sessionId) {
+          console.log(`[handleGenerateVideoPrompt] Syncing V${currentVersionNumber} video prompt to cloud (sessionId: ${sessionId})...`);
+          updateCloudVersionVideoPrompt(sessionId, currentVersionNumber, generatedVideoPrompt);
+        } else {
+          console.log(`[handleGenerateVideoPrompt] No sessionId yet for V${currentVersionNumber}, will sync when session is created`);
         }
       } else {
         setError(data.error?.message || "生成Video Prompt失败");
@@ -928,9 +992,11 @@ export default function HomePage() {
   };
 
   // Background translation helper - updates existing version's Chinese translation
+  // IMPORTANT: Uses refs to get latest sessionId (avoids stale closure issues)
   const translatePromptInBackground = async (promptText: string, versionNumber: number) => {
     setIsTranslating(true);
     setChinesePrompt(""); // Clear old translation
+    console.log(`[translatePromptInBackground] Starting translation for V${versionNumber}...`);
     try {
       const response = await fetch("/api/translate-prompt", {
         method: "POST",
@@ -943,10 +1009,16 @@ export default function HomePage() {
         setChinesePrompt(translatedText);
         // Update the version's Chinese translation locally
         updateVersionChinesePrompt(versionNumber, translatedText);
+        console.log(`[translatePromptInBackground] V${versionNumber} translated locally`);
 
         // Also update in cloud if session exists
-        if (currentSessionId) {
-          updateCloudVersionChinese(currentSessionId, versionNumber, translatedText);
+        // CRITICAL: Use ref to get latest sessionId (avoids stale closure)
+        const sessionId = currentSessionIdRef.current;
+        if (sessionId) {
+          console.log(`[translatePromptInBackground] Syncing V${versionNumber} Chinese to cloud (sessionId: ${sessionId})...`);
+          updateCloudVersionChinese(sessionId, versionNumber, translatedText);
+        } else {
+          console.log(`[translatePromptInBackground] No sessionId yet for V${versionNumber}, will sync when session is created`);
         }
       }
     } catch (err) {
@@ -1073,10 +1145,12 @@ export default function HomePage() {
           videoPrompt: "",
           createdAt: new Date().toISOString(),
         };
+        // CRITICAL: Update ref immediately (synchronous), then state (async)
+        promptVersionsRef.current = [newVersion];
         setPromptVersions([newVersion]); // Replace with single V1
         setCurrentVersionNumber(1);
         setVideoPrompt("");  // Clear video prompt for new version
-        console.log("Created version V1 for new session");
+        console.log("[handleGeneratePrompt] Created V1 for new session (ref and state updated)");
 
         // Start translation immediately for better UX
         // Cloud sync will happen later via retry mechanism when session/cloudId is available
@@ -1105,8 +1179,13 @@ export default function HomePage() {
     const existingVersion = existingVersions.find(v => v.version === version.version);
 
     if (existingVersion?.cloudId) {
-      console.log(`V${version.version} found in cloud with ID: ${existingVersion.cloudId}`);
-      // Update local state with cloudId
+      console.log(`[ensureVersionCloudId] V${version.version} found in cloud with ID: ${existingVersion.cloudId}`);
+      // CRITICAL: Update ref immediately, then state
+      promptVersionsRef.current = promptVersionsRef.current.map(v =>
+        v.version === version.version
+          ? { ...v, cloudId: existingVersion.cloudId, synced: true }
+          : v
+      );
       setPromptVersions(prev => prev.map(v =>
         v.version === version.version
           ? { ...v, cloudId: existingVersion.cloudId, synced: true }
@@ -1152,22 +1231,37 @@ export default function HomePage() {
         return;
       }
 
-      // Sync V1 to cloud after session is created (use ensureVersionCloudId to avoid duplicates)
-      const currentVersion = promptVersions.find(v => v.version === currentVersionNumber);
+      // Sync V1 to cloud after session is created
+      // CRITICAL: Use ref to get latest version state
+      const currentVersion = promptVersionsRef.current.find(v => v.version === currentVersionNumber);
+      console.log(`[handleGenerateBatch] Session created, syncing V${currentVersionNumber} to cloud...`);
+      console.log(`[handleGenerateBatch] V${currentVersionNumber} local state: chinese=${currentVersion?.chinesePrompt ? 'YES' : 'NO'}, video=${currentVersion?.videoPrompt ? 'YES' : 'NO'}`);
+
       if (currentVersion && !currentVersion.cloudId) {
         const versionToSync = currentVersionNumber;
-        const englishPrompt = currentVersion.englishPrompt;
 
         // Use ensureVersionCloudId which checks for existing version first
-        ensureVersionCloudId(activeSessionId, currentVersion).then(cloudId => {
-          console.log(`V${versionToSync} ensured in cloud with ID: ${cloudId}`);
+        const cloudId = await ensureVersionCloudId(activeSessionId, currentVersion);
+        console.log(`[handleGenerateBatch] V${versionToSync} synced to cloud with ID: ${cloudId}`);
 
-          // Start translation if not done yet
-          if (cloudId && versionToSync === 1 && !currentVersion.chinesePrompt) {
-            console.log(`Starting translation for V${versionToSync} now that cloudId is ready`);
-            translatePromptInBackground(englishPrompt, versionToSync);
+        // CRITICAL: After V1 is synced to cloud, sync any existing translations/video prompts
+        // These may have been generated before session was created
+        if (cloudId) {
+          // Check latest state from ref (may have been updated during translation)
+          const latestVersion = promptVersionsRef.current.find(v => v.version === versionToSync);
+
+          // Sync Chinese translation if exists but not yet in cloud
+          if (latestVersion?.chinesePrompt) {
+            console.log(`[handleGenerateBatch] V${versionToSync} has Chinese translation, syncing to cloud...`);
+            updateCloudVersionChinese(activeSessionId, versionToSync, latestVersion.chinesePrompt);
           }
-        });
+
+          // Sync video prompt if exists but not yet in cloud
+          if (latestVersion?.videoPrompt) {
+            console.log(`[handleGenerateBatch] V${versionToSync} has video prompt, syncing to cloud...`);
+            updateCloudVersionVideoPrompt(activeSessionId, versionToSync, latestVersion.videoPrompt);
+          }
+        }
       }
     } else {
       await updateSessionStatus(activeSessionId, "in_progress");
@@ -1639,6 +1733,8 @@ export default function HomePage() {
                     <button
                       onClick={() => {
                         if (confirm("确定要清除所有Prompt版本和图片历史吗？此操作不可撤销。")) {
+                          // CRITICAL: Update refs immediately, then state
+                          promptVersionsRef.current = [];
                           setPromptVersions([]);
                           setImages([]);
                           setCurrentVersionNumber(0);
