@@ -692,16 +692,20 @@ export default function HomePage() {
     versionNumber?: number
   ): Promise<string | null> => {
     try {
+      console.log(`[syncVersionToCloud] Syncing V${versionNumber} to session ${sessionId}...`);
+      console.log(`[syncVersionToCloud] Data:`, JSON.stringify(versionData, null, 2));
+
       const response = await fetch(`/api/sessions/${sessionId}/versions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(versionData),
       });
       const data = await response.json();
+
       if (data.success && data.data?.version?.id) {
         const cloudId = data.data.version.id;
         const syncedVersionNumber = data.data.version_number || versionNumber;
-        console.log(`Synced version V${syncedVersionNumber} to cloud: ${cloudId}`);
+        console.log(`[syncVersionToCloud] SUCCESS: V${syncedVersionNumber} synced with cloudId: ${cloudId}`);
 
         // CRITICAL FIX: Update local state with cloudId so that
         // updateCloudVersionChinese and updateCloudVersionVideoPrompt can find it
@@ -715,10 +719,16 @@ export default function HomePage() {
 
         return cloudId;
       }
-      console.warn("Failed to sync version to cloud:", data.error);
+
+      // IMPORTANT: Show error to user, not just console
+      const errorMsg = data.error?.message || data.error?.details || "Unknown error";
+      console.error(`[syncVersionToCloud] FAILED: ${errorMsg}`, data.error);
+      setError(`版本保存失败: ${errorMsg}`);
       return null;
     } catch (err) {
-      console.error("Cloud sync error:", err);
+      const errorMsg = err instanceof Error ? err.message : "Network error";
+      console.error("[syncVersionToCloud] EXCEPTION:", err);
+      setError(`版本保存失败: ${errorMsg}`);
       return null;
     }
   };
@@ -726,8 +736,10 @@ export default function HomePage() {
   // Load versions from cloud (called when loading a session)
   const loadVersionsFromCloud = async (sessionId: string): Promise<PromptVersion[]> => {
     try {
+      console.log(`[loadVersionsFromCloud] Loading versions for session ${sessionId}...`);
       const response = await fetch(`/api/sessions/${sessionId}/versions`);
       const data = await response.json();
+
       if (data.success && data.data?.versions) {
         // Convert cloud format to local format
         const cloudVersions: PromptVersion[] = data.data.versions.map((v: any) => ({
@@ -740,12 +752,17 @@ export default function HomePage() {
           cloudId: v.id,
           synced: true,
         }));
-        console.log(`Loaded ${cloudVersions.length} versions from cloud`);
+        console.log(`[loadVersionsFromCloud] SUCCESS: Loaded ${cloudVersions.length} versions`);
+        cloudVersions.forEach(v => {
+          console.log(`  - V${v.version}: cloudId=${v.cloudId}, chinese=${v.chinesePrompt ? 'YES' : 'NO'}, video=${v.videoPrompt ? 'YES' : 'NO'}`);
+        });
         return cloudVersions;
       }
+
+      console.warn(`[loadVersionsFromCloud] No versions found or error:`, data.error);
       return [];
     } catch (err) {
-      console.error("Failed to load versions from cloud:", err);
+      console.error("[loadVersionsFromCloud] EXCEPTION:", err);
       return [];
     }
   };
