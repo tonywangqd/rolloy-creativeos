@@ -103,6 +103,9 @@ export default function HomePage() {
   // Use ref to track stop state (avoids stale closure issues)
   const shouldStopRef = useRef(false);
 
+  // Use ref to track latest promptVersions (avoids stale closure issues in setTimeout retries)
+  const promptVersionsRef = useRef<PromptVersion[]>([]);
+
   // Lightbox state
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -134,6 +137,12 @@ export default function HomePage() {
   useEffect(() => {
     loadSessions();
   }, []);
+
+  // Keep promptVersionsRef in sync with promptVersions state
+  // This is critical for setTimeout retries in updateCloudVersionChinese/VideoPrompt
+  useEffect(() => {
+    promptVersionsRef.current = promptVersions;
+  }, [promptVersions]);
 
   // Load persisted data from localStorage on mount
   useEffect(() => {
@@ -779,6 +788,7 @@ export default function HomePage() {
   };
 
   // Update Chinese translation in cloud (with retry for pending sync)
+  // IMPORTANT: Uses promptVersionsRef.current to avoid stale closure in setTimeout retries
   const updateCloudVersionChinese = async (
     sessionId: string,
     versionNumber: number,
@@ -788,8 +798,8 @@ export default function HomePage() {
     const MAX_RETRIES = 5;
     const RETRY_DELAY_MS = 1000;
 
-    // Find the cloud version ID from current state
-    const version = promptVersions.find(v => v.version === versionNumber);
+    // Find the cloud version ID from ref (not state) to get latest value in retries
+    const version = promptVersionsRef.current.find(v => v.version === versionNumber);
 
     if (!version?.cloudId) {
       // cloudId not yet available, retry after delay
@@ -805,6 +815,7 @@ export default function HomePage() {
     }
 
     try {
+      console.log(`[updateCloudVersionChinese] Updating V${versionNumber} (cloudId: ${version.cloudId}) with Chinese translation...`);
       const response = await fetch(`/api/sessions/${sessionId}/versions/${version.cloudId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -812,16 +823,17 @@ export default function HomePage() {
       });
       const data = await response.json();
       if (data.success) {
-        console.log(`Updated Chinese for V${versionNumber} in cloud`);
+        console.log(`[updateCloudVersionChinese] SUCCESS: Updated Chinese for V${versionNumber} in cloud`);
       } else {
-        console.warn("Failed to update cloud Chinese:", data.error);
+        console.warn("[updateCloudVersionChinese] FAILED:", data.error);
       }
     } catch (err) {
-      console.error("Failed to update cloud version Chinese:", err);
+      console.error("[updateCloudVersionChinese] EXCEPTION:", err);
     }
   };
 
   // Update video prompt in cloud (with retry for pending sync)
+  // IMPORTANT: Uses promptVersionsRef.current to avoid stale closure in setTimeout retries
   const updateCloudVersionVideoPrompt = async (
     sessionId: string,
     versionNumber: number,
@@ -831,8 +843,8 @@ export default function HomePage() {
     const MAX_RETRIES = 5;
     const RETRY_DELAY_MS = 1000;
 
-    // Find the cloud version ID from current state
-    const version = promptVersions.find(v => v.version === versionNumber);
+    // Find the cloud version ID from ref (not state) to get latest value in retries
+    const version = promptVersionsRef.current.find(v => v.version === versionNumber);
 
     if (!version?.cloudId) {
       // cloudId not yet available, retry after delay
@@ -848,6 +860,7 @@ export default function HomePage() {
     }
 
     try {
+      console.log(`[updateCloudVersionVideoPrompt] Updating V${versionNumber} (cloudId: ${version.cloudId}) with video prompt...`);
       const response = await fetch(`/api/sessions/${sessionId}/versions/${version.cloudId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -855,12 +868,12 @@ export default function HomePage() {
       });
       const data = await response.json();
       if (data.success) {
-        console.log(`Updated video prompt for V${versionNumber} in cloud`);
+        console.log(`[updateCloudVersionVideoPrompt] SUCCESS: Updated video prompt for V${versionNumber} in cloud`);
       } else {
-        console.warn("Failed to update cloud video prompt:", data.error);
+        console.warn("[updateCloudVersionVideoPrompt] FAILED:", data.error);
       }
     } catch (err) {
-      console.error("Failed to update cloud version video prompt:", err);
+      console.error("[updateCloudVersionVideoPrompt] EXCEPTION:", err);
     }
   };
 
