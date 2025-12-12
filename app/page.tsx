@@ -1075,8 +1075,24 @@ export default function HomePage() {
       return version.cloudId;
     }
 
-    // Need to sync to cloud and wait for it
-    console.log(`V${version.version} needs to be synced to cloud before generating images...`);
+    // First, try to load existing versions from cloud (in case version already exists)
+    console.log(`V${version.version} has no cloudId, checking if it exists in cloud...`);
+    const existingVersions = await loadVersionsFromCloud(sessionId);
+    const existingVersion = existingVersions.find(v => v.version === version.version);
+
+    if (existingVersion?.cloudId) {
+      console.log(`V${version.version} found in cloud with ID: ${existingVersion.cloudId}`);
+      // Update local state with cloudId
+      setPromptVersions(prev => prev.map(v =>
+        v.version === version.version
+          ? { ...v, cloudId: existingVersion.cloudId, synced: true }
+          : v
+      ));
+      return existingVersion.cloudId;
+    }
+
+    // Version doesn't exist in cloud, create it
+    console.log(`V${version.version} not found in cloud, creating...`);
 
     // syncVersionToCloud now updates state with cloudId automatically
     const cloudId = await syncVersionToCloud(sessionId, {
@@ -1112,26 +1128,17 @@ export default function HomePage() {
         return;
       }
 
-      // Sync V1 to cloud after session is created
-      // Pass versionNumber so syncVersionToCloud updates state with cloudId
+      // Sync V1 to cloud after session is created (use ensureVersionCloudId to avoid duplicates)
       const currentVersion = promptVersions.find(v => v.version === currentVersionNumber);
-      if (currentVersion && !currentVersion.synced) {
-        const versionToSync = currentVersionNumber; // Capture for closure
-        const englishPrompt = currentVersion.englishPrompt; // Capture for translation
+      if (currentVersion && !currentVersion.cloudId) {
+        const versionToSync = currentVersionNumber;
+        const englishPrompt = currentVersion.englishPrompt;
 
-        syncVersionToCloud(activeSessionId, {
-          prompt: currentVersion.englishPrompt,
-          prompt_chinese: currentVersion.chinesePrompt,
-          video_prompt: currentVersion.videoPrompt,
-          product_state: productState,
-          reference_image_url: referenceImageUrl,
-          created_from: "initial",
-        }, versionToSync).then(cloudId => {
-          // syncVersionToCloud updates state with cloudId automatically
-          console.log(`V${versionToSync} synced to cloud with ID: ${cloudId}`);
+        // Use ensureVersionCloudId which checks for existing version first
+        ensureVersionCloudId(activeSessionId, currentVersion).then(cloudId => {
+          console.log(`V${versionToSync} ensured in cloud with ID: ${cloudId}`);
 
-          // NOW start translation since we have session and cloudId
-          // This ensures updateCloudVersionChinese will find both sessionId and cloudId
+          // Start translation if not done yet
           if (cloudId && versionToSync === 1 && !currentVersion.chinesePrompt) {
             console.log(`Starting translation for V${versionToSync} now that cloudId is ready`);
             translatePromptInBackground(englishPrompt, versionToSync);
