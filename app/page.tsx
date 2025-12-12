@@ -387,6 +387,7 @@ export default function HomePage() {
         const cloudVersions = await loadVersionsFromCloud(session.id);
 
         // Map images with version information
+        console.log(`[loadSession] Session has ${sessionDetail.images.length} images in database`);
         const restoredImages: GeneratedImage[] = sessionDetail.images.map((img: any) => {
           // Find version number from cloudVersions using prompt_version_id
           let promptVersionNumber: number | undefined;
@@ -406,6 +407,16 @@ export default function HomePage() {
             promptVersion: promptVersionNumber,
           };
         });
+
+        // Log image details for debugging
+        const successImages = restoredImages.filter(img => img.status === "success" && img.storageUrl);
+        console.log(`[loadSession] Images breakdown:`);
+        console.log(`  - Total: ${restoredImages.length}`);
+        console.log(`  - Success with URL: ${successImages.length}`);
+        restoredImages.forEach((img, i) => {
+          console.log(`  - #${i+1}: status=${img.status}, hasUrl=${!!img.storageUrl}, version=V${img.promptVersion || '?'}`);
+        });
+
         setImages(restoredImages);
 
         if (cloudVersions.length > 0) {
