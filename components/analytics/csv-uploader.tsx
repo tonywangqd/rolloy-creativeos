@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,9 +17,33 @@ interface CSVUploaderProps {
 
 export function CSVUploader({ onDataParsed }: CSVUploaderProps) {
   const [csvText, setCsvText] = useState("");
+  const [localCsvText, setLocalCsvText] = useState(""); // Local state for immediate UI updates
   const [fileName, setFileName] = useState("");
   const [isParsing, setIsParsing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Debounced handler for CSV text input
+  const handleCsvTextChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setLocalCsvText(value);
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      setCsvText(value);
+    }, 300);
+  }, []);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -32,6 +56,7 @@ export function CSVUploader({ onDataParsed }: CSVUploaderProps) {
     reader.onload = (e) => {
       const text = e.target?.result as string;
       setCsvText(text);
+      setLocalCsvText(text); // Sync local state
       parseCSV(text);
     };
     reader.readAsText(file);
@@ -58,14 +83,18 @@ export function CSVUploader({ onDataParsed }: CSVUploaderProps) {
   };
 
   const handleTextPaste = () => {
-    if (csvText.trim()) {
+    // Use local state for immediate check, but ensure main state is synced
+    const textToUse = localCsvText.trim() || csvText.trim();
+    if (textToUse) {
       setIsParsing(true);
-      parseCSV(csvText);
+      setCsvText(localCsvText); // Sync main state before parsing
+      parseCSV(textToUse);
     }
   };
 
   const clearData = () => {
     setCsvText("");
+    setLocalCsvText(""); // Clear local state too
     setFileName("");
     onDataParsed([]);
     if (fileInputRef.current) {
@@ -129,15 +158,15 @@ export function CSVUploader({ onDataParsed }: CSVUploaderProps) {
         <div className="space-y-2">
           <Textarea
             label="Paste CSV Data"
-            value={csvText}
-            onChange={(e) => setCsvText(e.target.value)}
+            value={localCsvText}
+            onChange={handleCsvTextChange}
             placeholder="Paste your CSV data here..."
             rows={8}
             className="font-mono text-xs"
           />
           <Button
             onClick={handleTextPaste}
-            disabled={!csvText.trim() || isParsing}
+            disabled={!localCsvText.trim() || isParsing}
             className="w-full"
           >
             {isParsing ? "Parsing..." : "Parse Data"}

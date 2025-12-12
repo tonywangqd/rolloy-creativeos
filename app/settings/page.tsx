@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,47 @@ export default function SettingsPage() {
   const [isSavingPrompt, setIsSavingPrompt] = useState(false); // Separate saving state for prompt
   const [isResetting, setIsResetting] = useState(false);
 
+  // Local state for immediate UI feedback (debounced sync to main state)
+  const [localSystemPrompt, setLocalSystemPrompt] = useState("");
+  const [localReferenceUrls, setLocalReferenceUrls] = useState("");
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceUrlTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Debounced handler for system prompt
+  const handleSystemPromptChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setLocalSystemPrompt(value);
+
+    // Debounce the main state update
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      setSystemPrompt(value);
+    }, 300);
+  }, []);
+
+  // Debounced handler for reference URLs
+  const handleReferenceUrlsChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setLocalReferenceUrls(value);
+
+    if (debounceUrlTimerRef.current) {
+      clearTimeout(debounceUrlTimerRef.current);
+    }
+    debounceUrlTimerRef.current = setTimeout(() => {
+      setReferenceUrls(value);
+    }, 300);
+  }, []);
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      if (debounceUrlTimerRef.current) clearTimeout(debounceUrlTimerRef.current);
+    };
+  }, []);
+
   // Load settings on mount
   useEffect(() => {
     loadSettings();
@@ -46,13 +87,16 @@ export default function SettingsPage() {
       // Load from localStorage
       setGeminiKey(localStorage.getItem("gemini_api_key") || "");
       setFluxKey(localStorage.getItem("flux_api_key") || "");
-      setReferenceUrls(localStorage.getItem("reference_urls") || "");
+      const savedReferenceUrls = localStorage.getItem("reference_urls") || "";
+      setReferenceUrls(savedReferenceUrls);
+      setLocalReferenceUrls(savedReferenceUrls);
 
       // Load system prompt from API
       const response = await fetch("/api/settings/system-prompt");
       const data = await response.json();
       if (data.success) {
         setSystemPrompt(data.data.systemPrompt);
+        setLocalSystemPrompt(data.data.systemPrompt); // Sync local state
         setOriginalSystemPrompt(data.data.systemPrompt); // Store original value
         setIsDefaultPrompt(data.data.isDefault);
         setPromptUpdatedAt(data.data.updatedAt);
@@ -116,6 +160,7 @@ export default function SettingsPage() {
 
       if (data.success) {
         setSystemPrompt(data.data.systemPrompt);
+        setLocalSystemPrompt(data.data.systemPrompt); // Sync local state
         setOriginalSystemPrompt(data.data.systemPrompt); // Update original after reset
         setIsDefaultPrompt(true);
         setPromptUpdatedAt(null);
@@ -216,8 +261,8 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <Textarea
-                value={systemPrompt}
-                onChange={(e) => setSystemPrompt(e.target.value)}
+                value={localSystemPrompt}
+                onChange={handleSystemPromptChange}
                 rows={16}
                 className="font-mono text-sm"
                 placeholder="Enter your custom system prompt..."
@@ -292,8 +337,8 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <Textarea
                 placeholder="https://example.com/image1.jpg&#10;https://example.com/image2.jpg"
-                value={referenceUrls}
-                onChange={(e) => setReferenceUrls(e.target.value)}
+                value={localReferenceUrls}
+                onChange={handleReferenceUrlsChange}
                 rows={4}
               />
             </CardContent>
