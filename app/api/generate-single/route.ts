@@ -143,37 +143,44 @@ async function updateImageRecord(
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // Build update object
-    const updateData: Record<string, unknown> = {
+    // Build upsert data - include all fields needed for insert
+    const upsertData: Record<string, unknown> = {
+      session_id: sessionId,
+      image_index: imageIndex + 1, // image_index is 1-based in DB
       status: 'success',
       storage_url: storageUrl,
       storage_path: storagePath,
       generated_at: new Date().toISOString(),
       aspect_ratio: aspectRatio,
       resolution: resolution,
+      mime_type: 'image/png',
+      provider: 'gemini',
+      retry_count: 0,
     };
 
     // Link to prompt version if provided
     if (promptVersionId) {
-      updateData.prompt_version_id = promptVersionId;
+      upsertData.prompt_version_id = promptVersionId;
     }
 
-    // Update the image record by session_id and image_index
+    // UPSERT: Update if exists, INSERT if not
+    // This fixes the issue where V2+ image records didn't exist
     const { error } = await supabase
       .from('generated_images_v2')
-      .update(updateData)
-      .eq('session_id', sessionId)
-      .eq('image_index', imageIndex + 1); // image_index is 1-based in DB
+      .upsert(upsertData, {
+        onConflict: 'session_id,image_index',
+        ignoreDuplicates: false, // Update on conflict
+      });
 
     if (error) {
-      console.error('Failed to update image record:', error.message);
+      console.error(`[updateImageRecord] FAILED for image ${imageIndex + 1}:`, error.message);
       return false;
     }
 
-    console.log(`Updated DB record for session ${sessionId}, image ${imageIndex + 1} (${aspectRatio} ${resolution}, version: ${promptVersionId || 'none'})`);
+    console.log(`[updateImageRecord] SUCCESS: session=${sessionId}, image=${imageIndex + 1}, versionId=${promptVersionId || 'none'}`);
     return true;
   } catch (error) {
-    console.error('Failed to update image record:', error);
+    console.error('[updateImageRecord] EXCEPTION:', error);
     return false;
   }
 }
