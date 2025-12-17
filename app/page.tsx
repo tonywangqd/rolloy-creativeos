@@ -11,6 +11,7 @@ import { SessionList } from "@/components/sessions/session-list";
 import { ImageLightbox } from "@/components/creative/image-lightbox";
 import type { SessionSummary } from "@/lib/types/session";
 import { cn } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type WorkflowStep = "select" | "prompt" | "generate";
 
@@ -1897,27 +1898,29 @@ export default function HomePage() {
                 <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
                   <div>
                     <label className="text-sm font-medium mb-2 block">Aspect Ratio</label>
-                    <select
-                      value={aspectRatio}
-                      onChange={(e) => setAspectRatio(e.target.value)}
-                      className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
-                    >
-                      {ASPECT_RATIOS.map((ratio) => (
-                        <option key={ratio} value={ratio}>{ratio}</option>
-                      ))}
-                    </select>
+                    <Select value={aspectRatio} onValueChange={setAspectRatio}>
+                      <SelectTrigger className="w-full h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ASPECT_RATIOS.map((ratio) => (
+                          <SelectItem key={ratio} value={ratio}>{ratio}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <label className="text-sm font-medium mb-2 block">Resolution</label>
-                    <select
-                      value={resolution}
-                      onChange={(e) => setResolution(e.target.value)}
-                      className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
-                    >
-                      {RESOLUTIONS.map((res) => (
-                        <option key={res} value={res}>{res}</option>
-                      ))}
-                    </select>
+                    <Select value={resolution} onValueChange={setResolution}>
+                      <SelectTrigger className="w-full h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {RESOLUTIONS.map((res) => (
+                          <SelectItem key={res} value={res}>{res}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
@@ -2142,27 +2145,29 @@ export default function HomePage() {
                     <div className="flex items-center gap-4">
                       <div className="flex items-center gap-2">
                         <label className="text-sm text-muted-foreground">Ratio:</label>
-                        <select
-                          value={aspectRatio}
-                          onChange={(e) => setAspectRatio(e.target.value)}
-                          className="h-8 px-2 rounded-md border border-input bg-background text-sm"
-                        >
-                          {ASPECT_RATIOS.map((ratio) => (
-                            <option key={ratio} value={ratio}>{ratio}</option>
-                          ))}
-                        </select>
+                        <Select value={aspectRatio} onValueChange={setAspectRatio}>
+                          <SelectTrigger className="h-8 w-[80px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ASPECT_RATIOS.map((ratio) => (
+                              <SelectItem key={ratio} value={ratio}>{ratio}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="flex items-center gap-2">
                         <label className="text-sm text-muted-foreground">Resolution:</label>
-                        <select
-                          value={resolution}
-                          onChange={(e) => setResolution(e.target.value)}
-                          className="h-8 px-2 rounded-md border border-input bg-background text-sm"
-                        >
-                          {RESOLUTIONS.map((res) => (
-                            <option key={res} value={res}>{res}</option>
-                          ))}
-                        </select>
+                        <Select value={resolution} onValueChange={setResolution}>
+                          <SelectTrigger className="h-8 w-[70px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {RESOLUTIONS.map((res) => (
+                              <SelectItem key={res} value={res}>{res}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="flex-1" />
                       <Button

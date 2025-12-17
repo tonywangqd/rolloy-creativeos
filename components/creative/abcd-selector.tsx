@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import {
   useSceneCategories,
@@ -146,25 +146,25 @@ export function ABCDSelector({ onSelectionChange, initialSelection, disabled }: 
     [formats]
   );
 
-  // Optimized onChange handlers
-  const handleSceneCategoryChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSceneCategory(e.target.value);
+  // Optimized onChange handlers - use value directly for Radix Select
+  const handleSceneCategoryChange = useCallback((value: string) => {
+    setSceneCategory(value);
   }, []);
 
-  const handleSceneDetailChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSceneDetail(e.target.value);
+  const handleSceneDetailChange = useCallback((value: string) => {
+    setSceneDetail(value);
   }, []);
 
-  const handleActionChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    setAction(e.target.value);
+  const handleActionChange = useCallback((value: string) => {
+    setAction(value);
   }, []);
 
-  const handleDriverChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    setDriver(e.target.value);
+  const handleDriverChange = useCallback((value: string) => {
+    setDriver(value);
   }, []);
 
-  const handleFormatChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFormat(e.target.value);
+  const handleFormatChange = useCallback((value: string) => {
+    setFormat(value);
   }, []);
 
   return (
@@ -182,31 +182,37 @@ export function ABCDSelector({ onSelectionChange, initialSelection, disabled }: 
             A - Scene (场景)
           </h3>
           <Select
-            label="Scene Category"
             value={sceneCategory}
-            onChange={handleSceneCategoryChange}
+            onValueChange={handleSceneCategoryChange}
             disabled={disabled || loadingCategories}
           >
-            <option value="">选择场景分类...</option>
-            {sortedCategories.map((cat) => (
-              <option key={cat.id} value={cat.code}>
-                {formatLabel(cat.code, cat.name_zh)}
-              </option>
-            ))}
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="选择场景分类..." />
+            </SelectTrigger>
+            <SelectContent>
+              {sortedCategories.map((cat) => (
+                <SelectItem key={cat.id} value={cat.code}>
+                  {formatLabel(cat.code, cat.name_zh)}
+                </SelectItem>
+              ))}
+            </SelectContent>
           </Select>
 
           <Select
-            label="Scene Detail"
             value={sceneDetail}
-            onChange={handleSceneDetailChange}
+            onValueChange={handleSceneDetailChange}
             disabled={disabled || !sceneCategory || loadingDetails}
           >
-            <option value="">选择具体场景...</option>
-            {availableSceneDetails.map((detail) => (
-              <option key={detail.id} value={detail.code}>
-                {formatLabel(detail.code, detail.name_zh)}
-              </option>
-            ))}
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="选择具体场景..." />
+            </SelectTrigger>
+            <SelectContent>
+              {availableSceneDetails.map((detail) => (
+                <SelectItem key={detail.id} value={detail.code}>
+                  {formatLabel(detail.code, detail.name_zh)}
+                </SelectItem>
+              ))}
+            </SelectContent>
           </Select>
         </div>
 
@@ -216,17 +222,20 @@ export function ABCDSelector({ onSelectionChange, initialSelection, disabled }: 
             B - Action (动作)
           </h3>
           <Select
-            label="Action"
             value={action}
-            onChange={handleActionChange}
+            onValueChange={handleActionChange}
             disabled={disabled || loadingActions}
           >
-            <option value="">选择动作...</option>
-            {sortedActions.map((act) => (
-              <option key={act.id} value={act.code}>
-                {formatLabel(act.code, act.name_zh)}
-              </option>
-            ))}
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="选择动作..." />
+            </SelectTrigger>
+            <SelectContent>
+              {sortedActions.map((act) => (
+                <SelectItem key={act.id} value={act.code}>
+                  {formatLabel(act.code, act.name_zh)}
+                </SelectItem>
+              ))}
+            </SelectContent>
           </Select>
         </div>
 
@@ -236,17 +245,20 @@ export function ABCDSelector({ onSelectionChange, initialSelection, disabled }: 
             C - Driver (情绪驱动)
           </h3>
           <Select
-            label="Emotional Driver"
             value={driver}
-            onChange={handleDriverChange}
+            onValueChange={handleDriverChange}
             disabled={disabled || loadingEmotions}
           >
-            <option value="">选择情绪驱动...</option>
-            {sortedEmotions.map((emo) => (
-              <option key={emo.id} value={emo.code}>
-                {formatLabel(emo.code, emo.name_zh)}
-              </option>
-            ))}
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="选择情绪驱动..." />
+            </SelectTrigger>
+            <SelectContent>
+              {sortedEmotions.map((emo) => (
+                <SelectItem key={emo.id} value={emo.code}>
+                  {formatLabel(emo.code, emo.name_zh)}
+                </SelectItem>
+              ))}
+            </SelectContent>
           </Select>
         </div>
 
@@ -256,17 +268,20 @@ export function ABCDSelector({ onSelectionChange, initialSelection, disabled }: 
             D - Format (格式)
           </h3>
           <Select
-            label="Creative Format"
             value={format}
-            onChange={handleFormatChange}
+            onValueChange={handleFormatChange}
             disabled={disabled || loadingFormats}
           >
-            <option value="">选择格式...</option>
-            {sortedFormats.map((fmt) => (
-              <option key={fmt.id} value={fmt.code}>
-                {formatLabel(fmt.code, fmt.name_zh)}
-              </option>
-            ))}
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="选择格式..." />
+            </SelectTrigger>
+            <SelectContent>
+              {sortedFormats.map((fmt) => (
+                <SelectItem key={fmt.id} value={fmt.code}>
+                  {formatLabel(fmt.code, fmt.name_zh)}
+                </SelectItem>
+              ))}
+            </SelectContent>
           </Select>
         </div>
       </CardContent>
