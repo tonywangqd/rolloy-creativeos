@@ -6,8 +6,8 @@
  */
 
 // Version info - update this when releasing new versions
-export const VERSION = "3.40.0";
-export const BUILD_TIMESTAMP = "2025-12-17T15:12:55+08:00"; // Beijing time
+export const VERSION = "3.40.1";
+export const BUILD_TIMESTAMP = "2025-12-17T16:20:50+08:00"; // Beijing time
 
 // Format the timestamp for display
 export const formatBeijingTime = (isoString: string) => {
