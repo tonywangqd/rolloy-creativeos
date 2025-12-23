@@ -52,6 +52,7 @@ export async function createSession(
     description,
     abcd_selection,
     prompt,
+    product_type = 'rollator', // Default for backward compatibility
     product_state,
     reference_image_url,
     total_images = 20,
@@ -67,6 +68,7 @@ export async function createSession(
       description,
       abcd_selection,
       prompt,
+      product_type,
       product_state,
       reference_image_url,
       total_images,
@@ -165,6 +167,7 @@ export async function listSessions(
   const supabase = getSupabaseClient();
 
   const {
+    product_type,
     status,
     limit = 50,
     offset = 0,
@@ -176,6 +179,10 @@ export async function listSessions(
   let queryBuilder = supabase.from('v_session_summary').select('*', { count: 'exact' });
 
   // Apply filters
+  if (product_type) {
+    queryBuilder = queryBuilder.eq('product_type', product_type);
+  }
+
   if (status) {
     queryBuilder = queryBuilder.eq('status', status);
   }

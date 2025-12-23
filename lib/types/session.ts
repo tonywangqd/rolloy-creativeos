@@ -1,7 +1,39 @@
 /**
  * Rolloy Creative OS - Generation Session Types
  * TypeScript types for conversation-based generation history
+ * Supports both Rollator (4-wheel) and Walker (2-wheel) products
  */
+
+// ============================================================================
+// Product Types
+// ============================================================================
+
+/**
+ * Product Type - Distinguishes between different product lines
+ */
+export type ProductType = 'rollator' | 'walker';
+
+/**
+ * Product State - State varies by product type
+ * - Rollator: FOLDED (收折状态) / UNFOLDED (展开使用状态)
+ * - Walker: IN_USE (使用中) / STORED (收纳状态)
+ */
+export type ProductState = 'FOLDED' | 'UNFOLDED' | 'IN_USE' | 'STORED';
+
+/**
+ * Valid states per product type
+ */
+export const VALID_PRODUCT_STATES: Record<ProductType, ProductState[]> = {
+  rollator: ['FOLDED', 'UNFOLDED'],
+  walker: ['IN_USE', 'STORED'],
+};
+
+/**
+ * Helper to validate product state for a given product type
+ */
+export function isValidProductState(productType: ProductType, state: string): state is ProductState {
+  return VALID_PRODUCT_STATES[productType]?.includes(state as ProductState) ?? false;
+}
 
 // ============================================================================
 // Enums
@@ -45,9 +77,12 @@ export interface GenerationSession {
     D: string;
   };
 
+  // Product Configuration
+  product_type: ProductType;  // 'rollator' or 'walker'
+  product_state: ProductState; // Rollator: FOLDED/UNFOLDED, Walker: IN_USE/STORED
+
   // Generation Parameters
   prompt: string;
-  product_state: 'FOLDED' | 'UNFOLDED';
   reference_image_url: string;
 
   // Session Status & Progress
@@ -171,7 +206,8 @@ export interface CreateSessionRequest {
     D: string;
   };
   prompt: string;
-  product_state: 'FOLDED' | 'UNFOLDED';
+  product_type?: ProductType;  // Default: 'rollator' (backward compatible)
+  product_state: ProductState; // Rollator: FOLDED/UNFOLDED, Walker: IN_USE/STORED
   reference_image_url: string;
   total_images?: number;      // Default: 20
   strength?: number;          // Default: 0.75
@@ -199,6 +235,7 @@ export interface UpdateSessionRequest {
  * List Sessions Query Parameters
  */
 export interface ListSessionsQuery {
+  product_type?: ProductType; // Filter by product type (rollator/walker)
   status?: SessionStatus;
   limit?: number;
   offset?: number;

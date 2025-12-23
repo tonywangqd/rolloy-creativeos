@@ -50,7 +50,7 @@ export function Sidebar() {
 
   // Determine current product type based on pathname
   const currentProductType: ProductType = useMemo(() => {
-    if (pathname === "/walker" || pathname.startsWith("/walker/")) {
+    if (pathname && (pathname === "/walker" || pathname.startsWith("/walker/"))) {
       return "walker";
     }
     return "rollator";

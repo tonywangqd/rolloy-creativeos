@@ -13,7 +13,9 @@ import type {
   CreateSessionRequest,
   ListSessionsQuery,
   SessionStatus,
+  ProductType,
 } from '@/lib/types/session';
+import { VALID_PRODUCT_STATES, isValidProductState } from '@/lib/types/session';
 import type { APIResponse } from '@/lib/types';
 
 // ============================================================================
@@ -29,6 +31,7 @@ export async function POST(request: NextRequest) {
       creative_name,
       abcd_selection,
       prompt,
+      product_type = 'rollator', // Default to rollator for backward compatibility
       product_state,
       reference_image_url,
     } = body;
@@ -60,19 +63,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate product state
-    if (product_state !== 'FOLDED' && product_state !== 'UNFOLDED') {
+    // Validate product type
+    const validProductTypes: ProductType[] = ['rollator', 'walker'];
+    if (!validProductTypes.includes(product_type)) {
       return NextResponse.json<APIResponse>(
         {
           success: false,
           error: {
             code: 'INVALID_REQUEST',
-            message: 'Invalid product_state: must be FOLDED or UNFOLDED',
+            message: `Invalid product_type: must be one of ${validProductTypes.join(', ')}`,
           },
         },
         { status: 400 }
       );
     }
+
+    // Validate product state based on product type
+    if (!isValidProductState(product_type, product_state)) {
+      const validStates = VALID_PRODUCT_STATES[product_type];
+      return NextResponse.json<APIResponse>(
+        {
+          success: false,
+          error: {
+            code: 'INVALID_REQUEST',
+            message: `Invalid product_state for ${product_type}: must be one of ${validStates.join(', ')}`,
+          },
+        },
+        { status: 400 }
+      );
+    }
+
+    // Add product_type to the request body
+    body.product_type = product_type;
 
     // Create session
     const result = await createSession(body);
@@ -117,6 +139,7 @@ export async function GET(request: NextRequest) {
 
     // Parse query parameters
     const query: ListSessionsQuery = {
+      product_type: searchParams.get('product_type') as ProductType | undefined,
       status: searchParams.get('status') as SessionStatus | undefined,
       limit: searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 50,
       offset: searchParams.get('offset') ? parseInt(searchParams.get('offset')!) : 0,

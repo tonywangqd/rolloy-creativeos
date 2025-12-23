@@ -452,6 +452,172 @@ export default function WalkerPage() {
     }
   };
 
+  // Create Walker session with cloud sync
+  const createWalkerSession = async (totalImages: number): Promise<string | null> => {
+    try {
+      const response = await fetch("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          creative_name: creativeName,
+          abcd_selection: {
+            A1: selection.sceneCategory,
+            A2: selection.sceneDetail,
+            B: selection.action,
+            C: selection.driver,
+            D: selection.format,
+          },
+          prompt: editedPrompt,
+          product_type: "walker",
+          product_state: walkerState,
+          reference_image_url: referenceImageUrl,
+          total_images: totalImages,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.success && data.data?.session?.id) {
+        const newSessionId = data.data.session.id;
+        currentSessionIdRef.current = newSessionId;
+        setCurrentSessionId(newSessionId);
+        console.log(`[Walker] Created session: ${newSessionId}`);
+        return newSessionId;
+      } else {
+        console.error("[Walker] Failed to create session:", data.error);
+        return null;
+      }
+    } catch (err) {
+      console.error("[Walker] Session creation error:", err);
+      return null;
+    }
+  };
+
+  // Generate Walker images
+  const handleGenerateImages = async (startIndex: number = 0, endIndex: number = 20) => {
+    if (!editedPrompt || !referenceImageUrl || !creativeName) {
+      setError("请先生成 Prompt");
+      return;
+    }
+
+    setIsGeneratingImages(true);
+    setError("");
+    shouldStopRef.current = false;
+
+    // Initialize images array
+    const totalToGenerate = endIndex - startIndex;
+    const initialImages: GeneratedImage[] = Array.from({ length: totalToGenerate }, (_, i) => ({
+      id: `walker-img-${startIndex + i}-${Date.now()}`,
+      url: "",
+      storageUrl: null,
+      selected: false,
+      rating: 0,
+      status: "pending" as const,
+      aspectRatio,
+      resolution,
+      promptVersion: currentVersionNumber,
+    }));
+    setImages(initialImages);
+    setStep("generate");
+
+    // Create session if not exists
+    let activeSessionId = currentSessionIdRef.current;
+    if (!activeSessionId) {
+      activeSessionId = await createWalkerSession(endIndex);
+    }
+
+    // Generate images sequentially
+    for (let i = startIndex; i < endIndex; i++) {
+      if (shouldStopRef.current) {
+        console.log("[Walker] Generation stopped by user");
+        break;
+      }
+
+      const localIndex = i - startIndex;
+      setCurrentImageIndex(localIndex);
+
+      // Update status to generating
+      setImages((prev) =>
+        prev.map((img, idx) =>
+          idx === localIndex ? { ...img, status: "generating" as const } : img
+        )
+      );
+
+      try {
+        const response = await fetch("/api/walker/generate-single", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt: editedPrompt,
+            referenceImageUrl,
+            imageIndex: i,
+            totalImages: endIndex,
+            creativeName,
+            sessionId: activeSessionId,
+            aspectRatio,
+            resolution,
+            walkerState,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (data.success && data.data?.imageUrl) {
+          setImages((prev) =>
+            prev.map((img, idx) =>
+              idx === localIndex
+                ? {
+                    ...img,
+                    url: data.data.imageUrl,
+                    storageUrl: data.data.storageUrl,
+                    status: "success" as const,
+                  }
+                : img
+            )
+          );
+        } else {
+          setImages((prev) =>
+            prev.map((img, idx) =>
+              idx === localIndex ? { ...img, status: "failed" as const } : img
+            )
+          );
+          console.error(`[Walker] Image ${i + 1} failed:`, data.error);
+        }
+      } catch (err) {
+        setImages((prev) =>
+          prev.map((img, idx) =>
+            idx === localIndex ? { ...img, status: "failed" as const } : img
+          )
+        );
+        console.error(`[Walker] Image ${i + 1} error:`, err);
+      }
+
+      // Add delay between requests
+      if (i < endIndex - 1 && !shouldStopRef.current) {
+        await new Promise((resolve) => setTimeout(resolve, API_DELAY_MS));
+      }
+    }
+
+    setIsGeneratingImages(false);
+  };
+
+  // Stop generation
+  const handleStopGeneration = () => {
+    shouldStopRef.current = true;
+    setIsGeneratingImages(false);
+  };
+
+  // Open lightbox
+  const handleImageClick = (index: number) => {
+    const successImages = images.filter((img) => img.status === "success");
+    const successIndex = successImages.findIndex(
+      (img) => img.id === images.filter((i) => i.status === "success")[index]?.id
+    );
+    if (successIndex >= 0) {
+      setLightboxIndex(successIndex);
+      setLightboxOpen(true);
+    }
+  };
+
   return (
     <div className="flex h-full">
       {/* Main Content */}
@@ -519,7 +685,10 @@ export default function WalkerPage() {
               </p>
             </CardHeader>
             <CardContent>
-              <ABCDSelector selection={selection} onSelectionChange={setSelection} />
+              <ABCDSelector
+                onSelectionChange={setSelection}
+                initialSelection={selection}
+              />
               <div className="mt-6 flex justify-end">
                 <Button
                   size="lg"
@@ -546,10 +715,7 @@ export default function WalkerPage() {
         {step === "prompt" && (
           <div className="space-y-6">
             {/* Naming Card */}
-            <NamingCard
-              creativeName={creativeName}
-              onRename={setCreativeName}
-            />
+            <NamingCard selection={selection} />
 
             {/* Walker State Selector */}
             <Card>
@@ -720,29 +886,156 @@ export default function WalkerPage() {
               )}
             </Card>
 
-            {/* Image Generation Placeholder */}
+            {/* Image Settings */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <ImageIcon className="h-5 w-5" />
-                  Walker 图片生成
+                  图片设置
                 </CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Standard Walker 广告图片生成功能开发中...
-                </p>
               </CardHeader>
               <CardContent>
-                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                  <Footprints className="h-16 w-16 mb-4 opacity-50" />
-                  <p className="text-lg font-medium">Walker 图片生成即将推出</p>
-                  <p className="text-sm mt-2">
-                    请使用生成的 Prompt 在外部图片生成工具中创建 Walker 广告图片
-                  </p>
-                  <Button variant="outline" className="mt-6" onClick={handleCopyPrompt}>
-                    <Copy className="mr-2 h-4 w-4" />
-                    复制 Prompt
-                  </Button>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">宽高比</label>
+                    <Select value={aspectRatio} onValueChange={setAspectRatio}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ASPECT_RATIOS.map((ratio) => (
+                          <SelectItem key={ratio} value={ratio}>
+                            {ratio}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">分辨率</label>
+                    <Select value={resolution} onValueChange={setResolution}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {RESOLUTIONS.map((res) => (
+                          <SelectItem key={res} value={res}>
+                            {res}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Generation Controls */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <Footprints className="h-5 w-5" />
+                    Walker 图片生成
+                  </CardTitle>
+                  <div className="flex gap-2">
+                    {isGeneratingImages ? (
+                      <Button variant="destructive" onClick={handleStopGeneration}>
+                        <StopCircle className="mr-2 h-4 w-4" />
+                        停止生成
+                      </Button>
+                    ) : (
+                      <>
+                        <Button
+                          variant="outline"
+                          onClick={() => handleGenerateImages(0, 4)}
+                          disabled={!editedPrompt}
+                        >
+                          <Sparkles className="mr-2 h-4 w-4" />
+                          生成 4 张
+                        </Button>
+                        <Button
+                          onClick={() => handleGenerateImages(0, 20)}
+                          disabled={!editedPrompt}
+                        >
+                          <Sparkles className="mr-2 h-4 w-4" />
+                          生成 20 张
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+                {isGeneratingImages && (
+                  <div className="mt-2">
+                    <p className="text-sm text-muted-foreground">
+                      正在生成第 {currentImageIndex + 1} 张图片...
+                    </p>
+                    <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary transition-all duration-300"
+                        style={{
+                          width: `${((images.filter((i) => i.status === "success").length) / images.length) * 100}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </CardHeader>
+              <CardContent>
+                {images.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                    <Footprints className="h-16 w-16 mb-4 opacity-50" />
+                    <p className="text-lg font-medium">准备生成 Walker 广告图片</p>
+                    <p className="text-sm mt-2">
+                      点击上方按钮开始生成 Standard Walker 广告图片
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-4 gap-4">
+                    {images.map((image, index) => (
+                      <div
+                        key={image.id}
+                        className={cn(
+                          "relative aspect-square rounded-lg border-2 overflow-hidden cursor-pointer transition-all",
+                          image.status === "success"
+                            ? "border-green-500"
+                            : image.status === "generating"
+                            ? "border-primary animate-pulse"
+                            : image.status === "failed"
+                            ? "border-destructive"
+                            : "border-muted"
+                        )}
+                        onClick={() => image.status === "success" && handleImageClick(index)}
+                      >
+                        {image.status === "success" && image.url ? (
+                          <img
+                            src={image.url}
+                            alt={`Walker 图片 ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : image.status === "generating" ? (
+                          <div className="flex items-center justify-center h-full bg-muted">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                          </div>
+                        ) : image.status === "failed" ? (
+                          <div className="flex flex-col items-center justify-center h-full bg-destructive/10">
+                            <RefreshCw className="h-6 w-6 text-destructive" />
+                            <span className="text-xs mt-1 text-destructive">失败</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center h-full bg-muted">
+                            <span className="text-sm text-muted-foreground">{index + 1}</span>
+                          </div>
+                        )}
+                        {image.status === "success" && (
+                          <div className="absolute top-2 right-2">
+                            <ZoomIn className="h-4 w-4 text-white drop-shadow-lg" />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -751,6 +1044,27 @@ export default function WalkerPage() {
 
       {/* Right Sidebar - Session History (hidden for now) */}
       {/* <SessionList sessions={sessions} onSelect={handleSessionSelect} /> */}
+
+      {/* Image Lightbox */}
+      <ImageLightbox
+        images={images
+          .filter((img) => img.status === "success")
+          .map((img) => ({
+            id: img.id,
+            url: img.url,
+            storageUrl: img.storageUrl,
+            rating: img.rating,
+          }))}
+        currentIndex={lightboxIndex}
+        isOpen={lightboxOpen}
+        onClose={() => setLightboxOpen(false)}
+        onRatingChange={(id, rating) => {
+          setImages((prev) =>
+            prev.map((img) => (img.id === id ? { ...img, rating } : img))
+          );
+        }}
+        onNavigate={(index) => setLightboxIndex(index)}
+      />
     </div>
   );
 }
