@@ -17,6 +17,8 @@ import {
   Loader2,
   Database,
   Check,
+  Footprints,
+  LayoutDashboard,
 } from "lucide-react";
 
 export default function SettingsPage() {
@@ -24,34 +26,60 @@ export default function SettingsPage() {
   const [geminiKey, setGeminiKey] = useState("");
   const [fluxKey, setFluxKey] = useState("");
   const [referenceUrls, setReferenceUrls] = useState("");
+
+  // Rollator System Prompt state
   const [systemPrompt, setSystemPrompt] = useState("");
-  const [originalSystemPrompt, setOriginalSystemPrompt] = useState(""); // Track original value
+  const [originalSystemPrompt, setOriginalSystemPrompt] = useState("");
   const [isDefaultPrompt, setIsDefaultPrompt] = useState(true);
   const [promptUpdatedAt, setPromptUpdatedAt] = useState<string | null>(null);
+  const [promptSaved, setPromptSaved] = useState(false);
+  const [isSavingPrompt, setIsSavingPrompt] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+
+  // Walker System Prompt state (separate from Rollator)
+  const [walkerSystemPrompt, setWalkerSystemPrompt] = useState("");
+  const [originalWalkerSystemPrompt, setOriginalWalkerSystemPrompt] = useState("");
+  const [isDefaultWalkerPrompt, setIsDefaultWalkerPrompt] = useState(true);
+  const [walkerPromptUpdatedAt, setWalkerPromptUpdatedAt] = useState<string | null>(null);
+  const [walkerPromptSaved, setWalkerPromptSaved] = useState(false);
+  const [isSavingWalkerPrompt, setIsSavingWalkerPrompt] = useState(false);
+  const [isResettingWalker, setIsResettingWalker] = useState(false);
+
   const [saved, setSaved] = useState(false);
-  const [promptSaved, setPromptSaved] = useState(false); // Separate saved state for prompt
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isSavingPrompt, setIsSavingPrompt] = useState(false); // Separate saving state for prompt
-  const [isResetting, setIsResetting] = useState(false);
 
   // Local state for immediate UI feedback (debounced sync to main state)
   const [localSystemPrompt, setLocalSystemPrompt] = useState("");
+  const [localWalkerSystemPrompt, setLocalWalkerSystemPrompt] = useState("");
   const [localReferenceUrls, setLocalReferenceUrls] = useState("");
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceWalkerTimerRef = useRef<NodeJS.Timeout | null>(null);
   const debounceUrlTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Debounced handler for system prompt
+  // Debounced handler for Rollator system prompt
   const handleSystemPromptChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setLocalSystemPrompt(value);
 
-    // Debounce the main state update
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
     }
     debounceTimerRef.current = setTimeout(() => {
       setSystemPrompt(value);
+    }, 300);
+  }, []);
+
+  // Debounced handler for Walker system prompt
+  const handleWalkerSystemPromptChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setLocalWalkerSystemPrompt(value);
+
+    if (debounceWalkerTimerRef.current) {
+      clearTimeout(debounceWalkerTimerRef.current);
+    }
+    debounceWalkerTimerRef.current = setTimeout(() => {
+      setWalkerSystemPrompt(value);
     }, 300);
   }, []);
 
@@ -72,6 +100,7 @@ export default function SettingsPage() {
   useEffect(() => {
     return () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      if (debounceWalkerTimerRef.current) clearTimeout(debounceWalkerTimerRef.current);
       if (debounceUrlTimerRef.current) clearTimeout(debounceUrlTimerRef.current);
     };
   }, []);
@@ -91,15 +120,26 @@ export default function SettingsPage() {
       setReferenceUrls(savedReferenceUrls);
       setLocalReferenceUrls(savedReferenceUrls);
 
-      // Load system prompt from API
+      // Load Rollator system prompt from API
       const response = await fetch("/api/settings/system-prompt");
       const data = await response.json();
       if (data.success) {
         setSystemPrompt(data.data.systemPrompt);
-        setLocalSystemPrompt(data.data.systemPrompt); // Sync local state
-        setOriginalSystemPrompt(data.data.systemPrompt); // Store original value
+        setLocalSystemPrompt(data.data.systemPrompt);
+        setOriginalSystemPrompt(data.data.systemPrompt);
         setIsDefaultPrompt(data.data.isDefault);
         setPromptUpdatedAt(data.data.updatedAt);
+      }
+
+      // Load Walker system prompt from API
+      const walkerResponse = await fetch("/api/settings/walker-system-prompt");
+      const walkerData = await walkerResponse.json();
+      if (walkerData.success) {
+        setWalkerSystemPrompt(walkerData.data.systemPrompt);
+        setLocalWalkerSystemPrompt(walkerData.data.systemPrompt);
+        setOriginalWalkerSystemPrompt(walkerData.data.systemPrompt);
+        setIsDefaultWalkerPrompt(walkerData.data.isDefault);
+        setWalkerPromptUpdatedAt(walkerData.data.updatedAt);
       }
     } catch (error) {
       console.error("Failed to load settings:", error);
@@ -160,8 +200,8 @@ export default function SettingsPage() {
 
       if (data.success) {
         setSystemPrompt(data.data.systemPrompt);
-        setLocalSystemPrompt(data.data.systemPrompt); // Sync local state
-        setOriginalSystemPrompt(data.data.systemPrompt); // Update original after reset
+        setLocalSystemPrompt(data.data.systemPrompt);
+        setOriginalSystemPrompt(data.data.systemPrompt);
         setIsDefaultPrompt(true);
         setPromptUpdatedAt(null);
       }
@@ -169,6 +209,54 @@ export default function SettingsPage() {
       console.error("Failed to reset prompt:", error);
     } finally {
       setIsResetting(false);
+    }
+  };
+
+  // Save Walker system prompt
+  const handleSaveWalkerPrompt = async () => {
+    setIsSavingWalkerPrompt(true);
+    try {
+      const response = await fetch("/api/settings/walker-system-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ systemPrompt: walkerSystemPrompt }),
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        setOriginalWalkerSystemPrompt(data.data.systemPrompt);
+        setIsDefaultWalkerPrompt(data.data.isDefault);
+        setWalkerPromptUpdatedAt(data.data.updatedAt);
+        setWalkerPromptSaved(true);
+        setTimeout(() => setWalkerPromptSaved(false), 2000);
+      }
+    } catch (error) {
+      console.error("Failed to save walker system prompt:", error);
+    } finally {
+      setIsSavingWalkerPrompt(false);
+    }
+  };
+
+  // Reset Walker system prompt to default
+  const handleResetWalkerPrompt = async () => {
+    setIsResettingWalker(true);
+    try {
+      const response = await fetch("/api/settings/walker-system-prompt", {
+        method: "DELETE",
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        setWalkerSystemPrompt(data.data.systemPrompt);
+        setLocalWalkerSystemPrompt(data.data.systemPrompt);
+        setOriginalWalkerSystemPrompt(data.data.systemPrompt);
+        setIsDefaultWalkerPrompt(true);
+        setWalkerPromptUpdatedAt(null);
+      }
+    } catch (error) {
+      console.error("Failed to reset walker prompt:", error);
+    } finally {
+      setIsResettingWalker(false);
     }
   };
 
@@ -183,8 +271,9 @@ export default function SettingsPage() {
     });
   };
 
-  // Check if prompt has unsaved changes
+  // Check if prompts have unsaved changes
   const hasPromptChanges = systemPrompt !== originalSystemPrompt;
+  const hasWalkerPromptChanges = walkerSystemPrompt !== originalWalkerSystemPrompt;
 
   if (isLoading) {
     return (
@@ -219,13 +308,13 @@ export default function SettingsPage() {
         </TabsList>
 
         <TabsContent value="general" className="space-y-6">
-          {/* System Prompt - Most Important */}
+          {/* Rollator System Prompt */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <MessageSquare className="h-5 w-5" />
-                  System Prompt
+                  <LayoutDashboard className="h-5 w-5" />
+                  Rollator System Prompt
                 </div>
                 <div className="flex items-center gap-2">
                   {!isDefaultPrompt && promptUpdatedAt && (
@@ -253,7 +342,7 @@ export default function SettingsPage() {
                 </div>
               </CardTitle>
               <CardDescription>
-                The AI uses this prompt to generate image descriptions. Customize it to match your brand and product requirements.
+                System prompt for Rollator (四轮助行车) creative generation. Customize to match your Rollator product requirements.
                 {isDefaultPrompt && (
                   <span className="ml-1 text-primary">(Using default)</span>
                 )}
@@ -263,13 +352,13 @@ export default function SettingsPage() {
               <Textarea
                 value={localSystemPrompt}
                 onChange={handleSystemPromptChange}
-                rows={16}
+                rows={12}
                 className="font-mono text-sm"
-                placeholder="Enter your custom system prompt..."
+                placeholder="Enter your custom Rollator system prompt..."
               />
               <div className="flex items-center justify-between">
                 <p className="text-xs text-muted-foreground">
-                  Tip: The prompt should instruct the AI how to generate image descriptions. Include rules about what to focus on and what to avoid.
+                  Tip: Include rules about Rollator product rendering, senior demographics, and commercial photography style.
                 </p>
                 <Button
                   onClick={handleSavePrompt}
@@ -282,6 +371,74 @@ export default function SettingsPage() {
                     <Check className="mr-2 h-4 w-4" />
                   )}
                   {promptSaved ? "Saved!" : "Confirm"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Walker System Prompt */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Footprints className="h-5 w-5" />
+                  Walker System Prompt
+                </div>
+                <div className="flex items-center gap-2">
+                  {!isDefaultWalkerPrompt && walkerPromptUpdatedAt && (
+                    <span className="text-xs text-muted-foreground">
+                      Last updated: {formatTime(walkerPromptUpdatedAt)}
+                    </span>
+                  )}
+                  {!isDefaultWalkerPrompt && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleResetWalkerPrompt}
+                      disabled={isResettingWalker}
+                    >
+                      {isResettingWalker ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <RotateCcw className="h-4 w-4 mr-1" />
+                          Reset
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+              </CardTitle>
+              <CardDescription>
+                System prompt for Standard Walker (两轮助行器) creative generation. This is separate from Rollator settings.
+                {isDefaultWalkerPrompt && (
+                  <span className="ml-1 text-primary">(Using default)</span>
+                )}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Textarea
+                value={localWalkerSystemPrompt}
+                onChange={handleWalkerSystemPromptChange}
+                rows={12}
+                className="font-mono text-sm"
+                placeholder="Enter your custom Walker system prompt..."
+              />
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">
+                  Note: Walker has different features (2 wheels, no seat, no brakes) than Rollator. Ensure prompts reflect these differences.
+                </p>
+                <Button
+                  onClick={handleSaveWalkerPrompt}
+                  disabled={isSavingWalkerPrompt || !hasWalkerPromptChanges}
+                  size="sm"
+                >
+                  {isSavingWalkerPrompt ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="mr-2 h-4 w-4" />
+                  )}
+                  {walkerPromptSaved ? "Saved!" : "Confirm"}
                 </Button>
               </div>
             </CardContent>

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useCallback, useTransition } from "react";
+import { useState, useCallback, useTransition, useMemo, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -11,32 +11,53 @@ import {
   Sparkles,
   ChevronLeft,
   ChevronRight,
+  Footprints,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VERSION, BUILD_TIMESTAMP, formatBeijingTime } from "./version-badge";
 
-const navigation = [
+// Product types
+type ProductType = "rollator" | "walker";
+
+// Navigation configuration based on product type
+const getNavigation = (productType: ProductType) => [
   {
-    name: "创意工作台",
-    href: "/",
+    name: productType === "rollator" ? "Rollator 创意工作台" : "Walker 创意工作台",
+    href: productType === "rollator" ? "/" : "/walker",
     icon: LayoutDashboard,
+    isWorkbench: true,
   },
   {
     name: "效能追踪",
     href: "/analytics",
     icon: BarChart3,
+    isWorkbench: false,
   },
   {
     name: "设置",
     href: "/settings",
     icon: Settings,
+    isWorkbench: false,
   },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [, startTransition] = useTransition();
+
+  // Determine current product type based on pathname
+  const currentProductType: ProductType = useMemo(() => {
+    if (pathname === "/walker" || pathname.startsWith("/walker/")) {
+      return "walker";
+    }
+    return "rollator";
+  }, [pathname]);
+
+  // Get navigation items based on current product type
+  const navigation = useMemo(() => getNavigation(currentProductType), [currentProductType]);
 
   // Optimized toggle handler to avoid INP issues
   const toggleCollapse = useCallback(() => {
@@ -44,6 +65,19 @@ export function Sidebar() {
       setIsCollapsed(prev => !prev);
     });
   }, []);
+
+  // Handle product type change
+  const handleProductTypeChange = useCallback((value: string) => {
+    const newType = value as ProductType;
+    if (newType !== currentProductType) {
+      // Navigate to the corresponding workbench
+      if (newType === "walker") {
+        router.push("/walker");
+      } else {
+        router.push("/");
+      }
+    }
+  }, [currentProductType, router]);
 
   return (
     <div
@@ -63,10 +97,56 @@ export function Sidebar() {
         )}
       </div>
 
+      {/* Product Type Selector */}
+      {!isCollapsed && (
+        <div className="px-4 py-3 border-b">
+          <label className="text-xs text-muted-foreground mb-1.5 block">产品类型</label>
+          <Select value={currentProductType} onValueChange={handleProductTypeChange}>
+            <SelectTrigger className="w-full h-9 text-sm">
+              <SelectValue placeholder="选择产品类型" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="rollator">
+                <div className="flex items-center gap-2">
+                  <LayoutDashboard className="h-4 w-4" />
+                  <span>Rollator (四轮助行车)</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="walker">
+                <div className="flex items-center gap-2">
+                  <Footprints className="h-4 w-4" />
+                  <span>Walker (两轮助行器)</span>
+                </div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      {isCollapsed && (
+        <div className="p-2 border-b">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-center p-2"
+            title={currentProductType === "rollator" ? "Rollator (四轮助行车)" : "Walker (两轮助行器)"}
+            onClick={() => handleProductTypeChange(currentProductType === "rollator" ? "walker" : "rollator")}
+          >
+            {currentProductType === "rollator" ? (
+              <LayoutDashboard className="h-5 w-5" />
+            ) : (
+              <Footprints className="h-5 w-5" />
+            )}
+          </Button>
+        </div>
+      )}
+
       {/* Navigation */}
       <nav className={cn("flex-1 space-y-1", isCollapsed ? "p-2" : "p-4")}>
         {navigation.map((item) => {
-          const isActive = pathname === item.href;
+          // For workbench items, check based on product type
+          const isActive = item.isWorkbench
+            ? (currentProductType === "rollator" ? pathname === "/" : pathname === "/walker")
+            : pathname === item.href;
           return (
             <Link
               key={item.name}
