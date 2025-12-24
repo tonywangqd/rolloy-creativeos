@@ -14,6 +14,7 @@ import {
   Footprints,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VERSION, BUILD_TIMESTAMP, formatBeijingTime } from "./version-badge";
 
 // Product types
@@ -96,38 +97,48 @@ export function Sidebar() {
         )}
       </div>
 
-      {/* Product Type Buttons */}
-      <div className={cn("border-b", isCollapsed ? "p-2 space-y-1" : "px-3 py-3 space-y-1.5")}>
-        {!isCollapsed && (
-          <label className="text-xs text-muted-foreground mb-1 block px-1">产品线</label>
-        )}
-        <Button
-          variant={currentProductType === "rollator" ? "default" : "ghost"}
-          size="sm"
-          className={cn(
-            "w-full transition-all",
-            isCollapsed ? "justify-center p-2" : "justify-start gap-2 px-3"
-          )}
-          onClick={() => handleProductTypeChange("rollator")}
-          title="Rollator (四轮助行车)"
-        >
-          <LayoutDashboard className={cn("flex-shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />
-          {!isCollapsed && <span>Rollator</span>}
-        </Button>
-        <Button
-          variant={currentProductType === "walker" ? "default" : "ghost"}
-          size="sm"
-          className={cn(
-            "w-full transition-all",
-            isCollapsed ? "justify-center p-2" : "justify-start gap-2 px-3"
-          )}
-          onClick={() => handleProductTypeChange("walker")}
-          title="Walker (两轮助行器)"
-        >
-          <Footprints className={cn("flex-shrink-0", isCollapsed ? "h-5 w-5" : "h-4 w-4")} />
-          {!isCollapsed && <span>Walker</span>}
-        </Button>
-      </div>
+      {/* Product Type Selector */}
+      {!isCollapsed && (
+        <div className="px-4 py-3 border-b">
+          <label className="text-xs text-muted-foreground mb-1.5 block">产品类型</label>
+          <Select value={currentProductType} onValueChange={handleProductTypeChange}>
+            <SelectTrigger className="w-full h-9 text-sm">
+              <SelectValue placeholder="选择产品类型" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="rollator">
+                <div className="flex items-center gap-2">
+                  <LayoutDashboard className="h-4 w-4" />
+                  <span>Rollator (四轮助行车)</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="walker">
+                <div className="flex items-center gap-2">
+                  <Footprints className="h-4 w-4" />
+                  <span>Walker (两轮助行器)</span>
+                </div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      {isCollapsed && (
+        <div className="p-2 border-b">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-center p-2"
+            title={currentProductType === "rollator" ? "Rollator (四轮助行车)" : "Walker (两轮助行器)"}
+            onClick={() => handleProductTypeChange(currentProductType === "rollator" ? "walker" : "rollator")}
+          >
+            {currentProductType === "rollator" ? (
+              <LayoutDashboard className="h-5 w-5" />
+            ) : (
+              <Footprints className="h-5 w-5" />
+            )}
+          </Button>
+        </div>
+      )}
 
       {/* Navigation */}
       <nav className={cn("flex-1 space-y-1", isCollapsed ? "p-2" : "p-4")}>
