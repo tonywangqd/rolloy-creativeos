@@ -173,6 +173,11 @@ export default function WalkerPage() {
     currentSessionIdRef.current = currentSessionId;
   }, [currentSessionId]);
 
+  // Load sessions on mount
+  useEffect(() => {
+    loadSessions();
+  }, []);
+
   // Load persisted data from localStorage on mount
   useEffect(() => {
     try {
@@ -261,6 +266,154 @@ export default function WalkerPage() {
       }
     }
   }, [selection, walkerState, referenceImageUrl, creativeName, aspectRatio, resolution, currentVersionNumber]);
+
+  // Load sessions from API (filter by product_type=walker)
+  const loadSessions = async () => {
+    try {
+      setIsLoadingSessions(true);
+      const response = await fetch("/api/sessions?product_type=walker");
+      const data = await response.json();
+      if (data.success) {
+        setSessions(data.data.sessions || []);
+      }
+    } catch (err) {
+      console.error("[Walker] Failed to load sessions:", err);
+    } finally {
+      setIsLoadingSessions(false);
+    }
+  };
+
+  // Load versions from cloud (called when loading a session)
+  const loadVersionsFromCloud = async (sessionId: string): Promise<PromptVersion[]> => {
+    try {
+      console.log(`[Walker] Loading versions for session ${sessionId}...`);
+      const response = await fetch(`/api/sessions/${sessionId}/versions`);
+      const data = await response.json();
+
+      if (data.success && data.data?.versions) {
+        const cloudVersions: PromptVersion[] = data.data.versions.map((v: any) => ({
+          id: `v${v.version_number}-${Date.now()}`,
+          version: v.version_number,
+          englishPrompt: v.prompt,
+          chinesePrompt: v.prompt_chinese || "",
+          videoPrompt: v.video_prompt || "",
+          createdAt: v.created_at,
+          cloudId: v.id,
+          synced: true,
+        }));
+        console.log(`[Walker] Loaded ${cloudVersions.length} versions from cloud`);
+        return cloudVersions;
+      }
+
+      console.warn(`[Walker] No versions found`);
+      return [];
+    } catch (err) {
+      console.error("[Walker] Failed to load versions:", err);
+      return [];
+    }
+  };
+
+  // Load a session
+  const handleSessionSelect = async (session: SessionSummary) => {
+    try {
+      const response = await fetch(`/api/sessions/${session.id}`);
+      const data = await response.json();
+
+      if (data.success) {
+        const sessionDetail = data.data;
+
+        // CRITICAL: Update ref immediately, then state
+        currentSessionIdRef.current = session.id;
+        setCurrentSessionId(session.id);
+        console.log(`[Walker] Loading session: ${session.id}`);
+
+        setSelection({
+          sceneCategory: sessionDetail.abcd_selection.A1,
+          sceneDetail: sessionDetail.abcd_selection.A2,
+          action: sessionDetail.abcd_selection.B,
+          driver: sessionDetail.abcd_selection.C,
+          format: sessionDetail.abcd_selection.D,
+        });
+        setPrompt(sessionDetail.prompt);
+        setEditedPrompt(sessionDetail.prompt);
+        setLocalEditedPrompt(sessionDetail.prompt);
+        setWalkerState(sessionDetail.product_state as WalkerState);
+        setReferenceImageUrl(sessionDetail.reference_image_url);
+        setCreativeName(sessionDetail.creative_name);
+
+        // Load prompt versions from cloud FIRST (needed for image-version mapping)
+        const cloudVersions = await loadVersionsFromCloud(session.id);
+
+        // Map images with version information
+        console.log(`[Walker] Session has ${sessionDetail.images.length} images in database`);
+        const restoredImages: GeneratedImage[] = sessionDetail.images.map((img: any) => {
+          let promptVersionNumber: number | undefined;
+          if (img.prompt_version_id && cloudVersions.length > 0) {
+            const version = cloudVersions.find(v => v.cloudId === img.prompt_version_id);
+            promptVersionNumber = version?.version;
+          }
+          return {
+            id: img.id,
+            url: img.storage_url || "",
+            storageUrl: img.storage_url || null,
+            selected: false,
+            rating: img.rating || 0,
+            status: img.status === "success" ? "success" : img.status === "failed" ? "failed" : "pending",
+            aspectRatio: img.aspect_ratio || undefined,
+            resolution: img.resolution || undefined,
+            promptVersion: promptVersionNumber,
+          };
+        });
+
+        setImages(restoredImages);
+
+        if (cloudVersions.length > 0) {
+          promptVersionsRef.current = cloudVersions;
+          setPromptVersions(cloudVersions);
+          const activeVersion = cloudVersions.find(v => v.synced) || cloudVersions[cloudVersions.length - 1];
+          setEditedPrompt(activeVersion.englishPrompt);
+          setLocalEditedPrompt(activeVersion.englishPrompt);
+          setChinesePrompt(activeVersion.chinesePrompt || "");
+          setVideoPrompt(activeVersion.videoPrompt || "");
+          setCurrentVersionNumber(activeVersion.version);
+        }
+
+        // Determine step based on data
+        if (restoredImages.length > 0) {
+          setStep("generate");
+        } else if (sessionDetail.prompt) {
+          setStep("prompt");
+        } else {
+          setStep("select");
+        }
+      }
+    } catch (err) {
+      console.error("[Walker] Failed to load session:", err);
+      setError("加载会话失败");
+    }
+  };
+
+  // Delete a session
+  const handleDeleteSession = async (sessionId: string) => {
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}`, {
+        method: "DELETE",
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        if (currentSessionId === sessionId) {
+          handleNewSession();
+        }
+        await loadSessions();
+      } else {
+        console.error("[Walker] Failed to delete session:", data.error?.message);
+      }
+    } catch (err) {
+      console.error("[Walker] Failed to delete session:", err);
+    }
+  };
 
   // Generate Walker Prompt
   const handleGeneratePrompt = async () => {
@@ -481,6 +634,7 @@ export default function WalkerPage() {
         currentSessionIdRef.current = newSessionId;
         setCurrentSessionId(newSessionId);
         console.log(`[Walker] Created session: ${newSessionId}`);
+        await loadSessions();
         return newSessionId;
       } else {
         console.error("[Walker] Failed to create session:", data.error);
@@ -598,6 +752,7 @@ export default function WalkerPage() {
     }
 
     setIsGeneratingImages(false);
+    await loadSessions();
   };
 
   // Stop generation
@@ -618,473 +773,559 @@ export default function WalkerPage() {
     }
   };
 
+  // Delete image
+  const handleDeleteImage = (imageId: string) => {
+    setImages(prev => prev.filter(img => img.id !== imageId));
+  };
+
+  // Toggle image selection
+  const toggleImageSelection = (id: string) => {
+    startTransition(() => {
+      setImages(prev => prev.map(img =>
+        img.id === id ? { ...img, selected: !img.selected } : img
+      ));
+    });
+  };
+
+  // Handle rating change
+  const handleRatingChange = (imageId: string, rating: number) => {
+    setImages(prev => prev.map(img =>
+      img.id === imageId ? { ...img, rating } : img
+    ));
+  };
+
+  // Computed values
+  const successfulImages = useMemo(() =>
+    images.filter(img => img.status === "success" && img.url),
+    [images]
+  );
+
+  const imageIdToLightboxIndex = useMemo(() => {
+    const map = new Map<string, number>();
+    successfulImages.forEach((img, idx) => map.set(img.id, idx));
+    return map;
+  }, [successfulImages]);
+
+  const openLightbox = useCallback((index: number) => {
+    setLightboxIndex(index);
+    setLightboxOpen(true);
+  }, []);
+
   return (
-    <div className="flex h-full">
-      {/* Main Content */}
-      <div className="flex-1 overflow-auto p-6">
-        {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Footprints className="h-8 w-8 text-primary" />
-            <div>
-              <h1 className="text-2xl font-bold">Walker 创意工作台</h1>
-              <p className="text-sm text-muted-foreground">
-                Standard Walker (两轮助行器) 广告创意生成
-              </p>
-            </div>
-          </div>
-          <Button variant="outline" onClick={handleNewSession}>
-            <Plus className="mr-2 h-4 w-4" />
-            新建创意
-          </Button>
-        </div>
-
-        {/* Workflow Steps */}
-        <div className="mb-6">
-          <div className="flex items-center gap-4">
-            <div className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-lg transition-colors",
-              step === "select" ? "bg-primary text-primary-foreground" : "bg-muted"
-            )}>
-              <span className="font-medium">1. 选择场景</span>
-            </div>
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            <div className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-lg transition-colors",
-              step === "prompt" ? "bg-primary text-primary-foreground" : "bg-muted"
-            )}>
-              <span className="font-medium">2. 生成Prompt</span>
-            </div>
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            <div className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-lg transition-colors",
-              step === "generate" ? "bg-primary text-primary-foreground" : "bg-muted"
-            )}>
-              <span className="font-medium">3. 生成图片</span>
-            </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Footprints className="h-8 w-8" />
+          <div>
+            <h1 className="text-3xl font-bold">Walker 创意工作台</h1>
+            <p className="text-muted-foreground">
+              Standard Walker (两轮助行器) 广告创意生成
+            </p>
           </div>
         </div>
 
-        {/* Error Display */}
-        {error && (
-          <div className="mb-4 rounded-lg bg-destructive/10 p-4 text-destructive">
-            {error}
+        {/* Step Indicator */}
+        <div className="flex items-center gap-2 text-sm">
+          <span className={`px-3 py-1 rounded-full ${step === "select" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+            1. 选择
+          </span>
+          <span className="text-muted-foreground">→</span>
+          <span className={`px-3 py-1 rounded-full ${step === "prompt" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+            2. Prompt
+          </span>
+          <span className="text-muted-foreground">→</span>
+          <span className={`px-3 py-1 rounded-full ${step === "generate" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+            3. 生成
+          </span>
+        </div>
+      </div>
+
+      {/* Error Display */}
+      {error && (
+        <div className="bg-destructive/20 text-destructive px-4 py-3 rounded-lg">
+          {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column: Sessions + ABCD Selection */}
+        <div className="lg:col-span-1 space-y-4">
+          <SessionList
+            sessions={sessions}
+            currentSessionId={currentSessionId}
+            onSessionSelect={handleSessionSelect}
+            onNewSession={handleNewSession}
+            onDeleteSession={handleDeleteSession}
+          />
+
+          <ABCDSelector
+            onSelectionChange={setSelection}
+            initialSelection={selection}
+            disabled={!!currentSessionId && step !== "select"}
+          />
+          <NamingCard selection={selection} />
+
+          {/* Action Buttons */}
+          <div className="space-y-3">
+            {step === "select" && (
+              <Button
+                size="lg"
+                className="w-full"
+                onClick={handleGeneratePrompt}
+                disabled={!isSelectionComplete || isGeneratingPrompt}
+              >
+                <Eye className="mr-2 h-5 w-5" />
+                {isGeneratingPrompt ? "生成中..." : "预览 Prompt"}
+              </Button>
+            )}
+
+            {step !== "select" && !currentSessionId && (
+              <Button
+                variant="outline"
+                size="lg"
+                className="w-full"
+                onClick={handleNewSession}
+              >
+                <RefreshCw className="mr-2 h-5 w-5" />
+                重新开始
+              </Button>
+            )}
           </div>
-        )}
+        </div>
 
-        {/* Step Content */}
-        {step === "select" && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Footprints className="h-5 w-5" />
-                Walker ABCD 场景选择
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                选择场景分类、细节、动作、情感驱动和格式，为 Standard Walker (两轮助行器) 生成创意
-              </p>
-            </CardHeader>
-            <CardContent>
-              <ABCDSelector
-                onSelectionChange={setSelection}
-                initialSelection={selection}
-              />
-              <div className="mt-6 flex justify-end">
-                <Button
-                  size="lg"
-                  onClick={handleGeneratePrompt}
-                  disabled={!isSelectionComplete || isGeneratingPrompt}
-                >
-                  {isGeneratingPrompt ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      生成中...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="mr-2 h-4 w-4" />
-                      生成 Walker Prompt
-                    </>
-                  )}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {step === "prompt" && (
-          <div className="space-y-6">
-            {/* Naming Card */}
-            <NamingCard selection={selection} />
-
-            {/* Walker State Selector */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Footprints className="h-5 w-5" />
-                  Walker 状态
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Standard Walker 可以是使用中或存放状态
-                </p>
-              </CardHeader>
-              <CardContent>
-                <div className="flex gap-4">
-                  <Button
-                    variant={walkerState === "IN_USE" ? "default" : "outline"}
-                    onClick={() => handleWalkerStateChange("IN_USE")}
-                    className="flex-1"
-                  >
-                    <Play className="mr-2 h-4 w-4" />
-                    使用中 (IN_USE)
-                  </Button>
-                  <Button
-                    variant={walkerState === "STORED" ? "default" : "outline"}
-                    onClick={() => handleWalkerStateChange("STORED")}
-                    className="flex-1"
-                  >
-                    <Pause className="mr-2 h-4 w-4" />
-                    存放 (STORED)
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* English Prompt */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <Wand2 className="h-5 w-5" />
-                    Walker Prompt (英文)
-                  </CardTitle>
-                  <div className="flex gap-2">
-                    <Button variant="ghost" size="sm" onClick={handleCopyPrompt}>
-                      {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleTranslatePrompt}
-                      disabled={isTranslating}
-                    >
-                      {isTranslating ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Languages className="mr-2 h-4 w-4" />
-                      )}
-                      翻译为中文
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <Textarea
-                  value={localEditedPrompt}
-                  onChange={handleEditedPromptChange}
-                  className="min-h-[200px] font-mono text-sm"
-                  placeholder="生成的 Walker 广告 Prompt 将显示在这里..."
-                />
-              </CardContent>
-            </Card>
-
-            {/* Chinese Translation */}
-            {chinesePrompt && (
+        {/* Right Column: Prompt Preview or Gallery */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Prompt Preview Step */}
+          {step === "prompt" && (
+            <div className="space-y-6">
+              {/* Walker State Selector */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Languages className="h-5 w-5" />
-                    中文翻译
+                    <Footprints className="h-5 w-5" />
+                    Walker 状态
                   </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Standard Walker 可以是使用中或存放状态
+                  </p>
                 </CardHeader>
                 <CardContent>
-                  <Textarea
-                    value={chinesePrompt}
-                    readOnly
-                    className="min-h-[150px] font-mono text-sm bg-muted"
-                  />
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Video Prompt */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <Film className="h-5 w-5" />
-                    视频 Prompt
-                  </CardTitle>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleGenerateVideoPrompt}
-                    disabled={isGeneratingVideoPrompt || !editedPrompt}
-                  >
-                    {isGeneratingVideoPrompt ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Film className="mr-2 h-4 w-4" />
-                    )}
-                    生成视频 Prompt
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <Textarea
-                  value={videoPrompt}
-                  readOnly
-                  className="min-h-[100px] font-mono text-sm bg-muted"
-                  placeholder="点击上方按钮生成视频 Prompt..."
-                />
-              </CardContent>
-            </Card>
-
-            {/* Action Buttons */}
-            <div className="flex justify-between">
-              <Button variant="outline" onClick={() => setStep("select")}>
-                <RotateCcw className="mr-2 h-4 w-4" />
-                返回选择
-              </Button>
-              <Button onClick={() => setStep("generate")} disabled={!editedPrompt}>
-                <ImageIcon className="mr-2 h-4 w-4" />
-                进入图片生成
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {step === "generate" && (
-          <div className="space-y-6">
-            {/* Prompt Panel */}
-            <Card>
-              <CardHeader className="cursor-pointer" onClick={togglePromptPanel}>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <Wand2 className="h-5 w-5" />
-                    当前 Walker Prompt
-                  </CardTitle>
-                  {isPromptPanelOpen ? (
-                    <ChevronUp className="h-4 w-4" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4" />
-                  )}
-                </div>
-              </CardHeader>
-              {isPromptPanelOpen && (
-                <CardContent>
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                    {editedPrompt || prompt}
-                  </p>
-                  <div className="mt-4 flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setStep("prompt")}>
-                      <Pencil className="mr-2 h-4 w-4" />
-                      编辑 Prompt
+                  <div className="flex gap-4">
+                    <Button
+                      variant={walkerState === "IN_USE" ? "default" : "outline"}
+                      onClick={() => handleWalkerStateChange("IN_USE")}
+                      className="flex-1"
+                    >
+                      <Play className="mr-2 h-4 w-4" />
+                      使用中 (IN_USE)
+                    </Button>
+                    <Button
+                      variant={walkerState === "STORED" ? "default" : "outline"}
+                      onClick={() => handleWalkerStateChange("STORED")}
+                      className="flex-1"
+                    >
+                      <Pause className="mr-2 h-4 w-4" />
+                      存放 (STORED)
                     </Button>
                   </div>
                 </CardContent>
-              )}
-            </Card>
+              </Card>
 
-            {/* Image Settings */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <ImageIcon className="h-5 w-5" />
-                  图片设置
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">宽高比</label>
-                    <Select value={aspectRatio} onValueChange={setAspectRatio}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ASPECT_RATIOS.map((ratio) => (
-                          <SelectItem key={ratio} value={ratio}>
-                            {ratio}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">分辨率</label>
-                    <Select value={resolution} onValueChange={setResolution}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {RESOLUTIONS.map((res) => (
-                          <SelectItem key={res} value={res}>
-                            {res}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Generation Controls */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <Footprints className="h-5 w-5" />
-                    Walker 图片生成
-                  </CardTitle>
-                  <div className="flex gap-2">
-                    {isGeneratingImages ? (
-                      <Button variant="destructive" onClick={handleStopGeneration}>
-                        <StopCircle className="mr-2 h-4 w-4" />
-                        停止生成
+              {/* English Prompt */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2">
+                      <Wand2 className="h-5 w-5" />
+                      Walker Prompt (英文)
+                    </CardTitle>
+                    <div className="flex gap-2">
+                      <Button variant="ghost" size="sm" onClick={handleCopyPrompt}>
+                        {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                       </Button>
-                    ) : (
-                      <>
-                        <Button
-                          variant="outline"
-                          onClick={() => handleGenerateImages(0, 4)}
-                          disabled={!editedPrompt}
-                        >
-                          <Sparkles className="mr-2 h-4 w-4" />
-                          生成 4 张
-                        </Button>
-                        <Button
-                          onClick={() => handleGenerateImages(0, 20)}
-                          disabled={!editedPrompt}
-                        >
-                          <Sparkles className="mr-2 h-4 w-4" />
-                          生成 20 张
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </div>
-                {isGeneratingImages && (
-                  <div className="mt-2">
-                    <p className="text-sm text-muted-foreground">
-                      正在生成第 {currentImageIndex + 1} 张图片...
-                    </p>
-                    <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-primary transition-all duration-300"
-                        style={{
-                          width: `${((images.filter((i) => i.status === "success").length) / images.length) * 100}%`,
-                        }}
-                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleTranslatePrompt}
+                        disabled={isTranslating}
+                      >
+                        {isTranslating ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Languages className="mr-2 h-4 w-4" />
+                        )}
+                        翻译为中文
+                      </Button>
                     </div>
                   </div>
-                )}
-              </CardHeader>
-              <CardContent>
-                {images.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                    <Footprints className="h-16 w-16 mb-4 opacity-50" />
-                    <p className="text-lg font-medium">准备生成 Walker 广告图片</p>
-                    <p className="text-sm mt-2">
-                      点击上方按钮开始生成 Standard Walker 广告图片
-                    </p>
+                </CardHeader>
+                <CardContent>
+                  <Textarea
+                    value={localEditedPrompt}
+                    onChange={handleEditedPromptChange}
+                    className="min-h-[200px] font-mono text-sm"
+                    placeholder="生成的 Walker 广告 Prompt 将显示在这里..."
+                  />
+                </CardContent>
+              </Card>
+
+              {/* Chinese Translation */}
+              {chinesePrompt && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Languages className="h-5 w-5" />
+                      中文翻译
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Textarea
+                      value={chinesePrompt}
+                      readOnly
+                      className="min-h-[150px] font-mono text-sm bg-muted"
+                    />
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Video Prompt */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2">
+                      <Film className="h-5 w-5" />
+                      视频 Prompt
+                    </CardTitle>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleGenerateVideoPrompt}
+                      disabled={isGeneratingVideoPrompt || !editedPrompt}
+                    >
+                      {isGeneratingVideoPrompt ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Film className="mr-2 h-4 w-4" />
+                      )}
+                      生成视频 Prompt
+                    </Button>
                   </div>
-                ) : (
-                  <div className="grid grid-cols-4 gap-4">
+                </CardHeader>
+                <CardContent>
+                  <Textarea
+                    value={videoPrompt}
+                    readOnly
+                    className="min-h-[100px] font-mono text-sm bg-muted"
+                    placeholder="点击上方按钮生成视频 Prompt..."
+                  />
+                </CardContent>
+              </Card>
+
+              {/* Image Settings */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <ImageIcon className="h-5 w-5" />
+                    图片设置
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">宽高比</label>
+                      <Select value={aspectRatio} onValueChange={setAspectRatio}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ASPECT_RATIOS.map((ratio) => (
+                            <SelectItem key={ratio} value={ratio}>
+                              {ratio}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">分辨率</label>
+                      <Select value={resolution} onValueChange={setResolution}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {RESOLUTIONS.map((res) => (
+                            <SelectItem key={res} value={res}>
+                              {res}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Action Buttons */}
+              <div className="flex justify-between">
+                <Button variant="outline" onClick={() => setStep("select")}>
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  返回选择
+                </Button>
+                <Button onClick={() => handleGenerateImages(0, 4)} disabled={!editedPrompt}>
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  生成 4 张图片
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Generate Step */}
+          {step === "generate" && (
+            <div className="space-y-6">
+              {/* Prompt Panel (collapsible) */}
+              <Card>
+                <CardHeader className="cursor-pointer" onClick={togglePromptPanel}>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2">
+                      <Wand2 className="h-5 w-5" />
+                      当前 Prompt
+                    </CardTitle>
+                    {isPromptPanelOpen ? (
+                      <ChevronUp className="h-4 w-4" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4" />
+                    )}
+                  </div>
+                </CardHeader>
+                {isPromptPanelOpen && (
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap line-clamp-3">
+                      {editedPrompt || prompt}
+                    </p>
+                    <div className="mt-4 flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setStep("prompt")}>
+                        <Pencil className="mr-2 h-4 w-4" />
+                        编辑 Prompt
+                      </Button>
+                    </div>
+                  </CardContent>
+                )}
+              </Card>
+
+              {/* Generation Controls */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2">
+                      <Footprints className="h-5 w-5" />
+                      Walker 图片生成
+                      {isGeneratingImages && (
+                        <span className="text-sm font-normal text-muted-foreground">
+                          ({currentImageIndex + 1}/{images.length})
+                        </span>
+                      )}
+                    </CardTitle>
+                    <div className="flex gap-2">
+                      {isGeneratingImages ? (
+                        <Button variant="destructive" onClick={handleStopGeneration}>
+                          <StopCircle className="mr-2 h-4 w-4" />
+                          停止生成
+                        </Button>
+                      ) : (
+                        <>
+                          <Button
+                            variant="outline"
+                            onClick={() => handleGenerateImages(images.length, images.length + 4)}
+                            disabled={!editedPrompt}
+                          >
+                            <Plus className="mr-2 h-4 w-4" />
+                            生成 4 张
+                          </Button>
+                          <Button
+                            onClick={() => handleGenerateImages(images.length, images.length + 20)}
+                            disabled={!editedPrompt}
+                          >
+                            <Sparkles className="mr-2 h-4 w-4" />
+                            生成 20 张
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  {isGeneratingImages && (
+                    <div className="mt-2">
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-primary transition-all duration-300"
+                          style={{
+                            width: `${((images.filter((i) => i.status === "success").length) / images.length) * 100}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-4 gap-3">
                     {images.map((image, index) => (
                       <div
                         key={image.id}
                         className={cn(
-                          "relative aspect-square rounded-lg border-2 overflow-hidden cursor-pointer transition-all",
+                          "group relative aspect-square rounded-lg overflow-hidden transition-all cursor-pointer border-2",
                           image.status === "success"
-                            ? "border-green-500"
+                            ? "border-transparent hover:border-primary"
                             : image.status === "generating"
                             ? "border-primary animate-pulse"
                             : image.status === "failed"
                             ? "border-destructive"
                             : "border-muted"
                         )}
-                        onClick={() => image.status === "success" && handleImageClick(index)}
                       >
-                        {image.status === "success" && image.url ? (
-                          <img
-                            src={image.url}
-                            alt={`Walker 图片 ${index + 1}`}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : image.status === "generating" ? (
-                          <div className="flex items-center justify-center h-full bg-muted">
+                        {/* Pending state */}
+                        {image.status === "pending" && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-muted">
+                            <span className="text-2xl font-bold text-muted-foreground/50">{index + 1}</span>
+                          </div>
+                        )}
+
+                        {/* Generating state */}
+                        {image.status === "generating" && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-muted">
                             <Loader2 className="h-8 w-8 animate-spin text-primary" />
                           </div>
-                        ) : image.status === "failed" ? (
-                          <div className="flex flex-col items-center justify-center h-full bg-destructive/10">
-                            <RefreshCw className="h-6 w-6 text-destructive" />
-                            <span className="text-xs mt-1 text-destructive">失败</span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-center h-full bg-muted">
-                            <span className="text-sm text-muted-foreground">{index + 1}</span>
+                        )}
+
+                        {/* Success state */}
+                        {image.status === "success" && image.url && (
+                          <>
+                            <img
+                              src={image.url}
+                              alt={`Walker 图片 ${index + 1}`}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                              onClick={() => {
+                                const lightboxIdx = imageIdToLightboxIndex.get(image.id) ?? 0;
+                                openLightbox(lightboxIdx);
+                              }}
+                            />
+                            {/* Selection checkbox */}
+                            <button
+                              className={cn(
+                                "absolute top-2 left-2 w-6 h-6 rounded flex items-center justify-center z-20 transition-all",
+                                image.selected
+                                  ? "bg-primary shadow-lg"
+                                  : "bg-black/30 hover:bg-black/50 border-2 border-white/80"
+                              )}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleImageSelection(image.id);
+                              }}
+                              title={image.selected ? "取消选择" : "选择图片"}
+                            >
+                              {image.selected && <Check className="h-4 w-4 text-white" />}
+                            </button>
+                            {/* Version badge */}
+                            {image.promptVersion && (
+                              <div className="absolute bottom-10 right-2 px-2 py-0.5 rounded text-[10px] font-bold bg-black/60 backdrop-blur-sm text-white z-10">
+                                V{image.promptVersion}
+                              </div>
+                            )}
+                            {/* Gradient overlay */}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+                            {/* Action buttons on hover */}
+                            <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                              <button
+                                className="w-8 h-8 bg-red-500/80 hover:bg-red-500 rounded-full flex items-center justify-center backdrop-blur-sm transition-all hover:scale-110"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteImage(image.id);
+                                }}
+                                title="删除图片"
+                              >
+                                <Trash2 className="h-4 w-4 text-white" />
+                              </button>
+                            </div>
+                          </>
+                        )}
+
+                        {/* Failed state */}
+                        {image.status === "failed" && (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted/50">
+                            <span className="text-sm text-red-500 font-medium">失败</span>
+                            <span className="text-[10px] text-muted-foreground mt-1">点击重试</span>
                           </div>
                         )}
-                        {image.status === "success" && (
-                          <div className="absolute top-2 right-2">
-                            <ZoomIn className="h-4 w-4 text-white drop-shadow-lg" />
+
+                        {/* Star rating badge */}
+                        {image.rating > 0 && (
+                          <div className="absolute top-2 left-10 flex items-center gap-0.5 bg-black/70 backdrop-blur-sm rounded-full px-2 py-1 z-10">
+                            <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                            <span className="text-[11px] text-white font-medium">{image.rating}</span>
                           </div>
                         )}
+
+                        {/* Bottom info bar */}
+                        <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between p-2 bg-gradient-to-t from-black/60 to-transparent">
+                          <div className="flex items-center gap-1.5">
+                            <span className="bg-white/20 backdrop-blur-sm text-white text-[11px] px-2 py-0.5 rounded-full font-medium">
+                              #{index + 1}
+                            </span>
+                            {image.aspectRatio && image.resolution && (
+                              <span className="bg-white/20 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded-full">
+                                {image.aspectRatio} · {image.resolution}
+                              </span>
+                            )}
+                          </div>
+                          {image.storageUrl && (
+                            <div className="bg-green-500/90 text-white p-1 rounded-full" title="已保存到云端">
+                              <Cloud className="h-3 w-3" />
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        )}
-      </div>
 
-      {/* Right Sidebar - Session History (hidden for now) */}
-      {/* <SessionList sessions={sessions} onSelect={handleSessionSelect} /> */}
+                  {images.length === 0 && (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <ImageIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>尚未生成图片</p>
+                      <p className="text-sm">点击上方按钮开始生成</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Initial State */}
+          {step === "select" && images.length === 0 && (
+            <Card className="h-[400px] flex items-center justify-center">
+              <div className="text-center text-muted-foreground">
+                <Footprints className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p className="text-lg font-medium">准备创作</p>
+                <p className="text-sm">完成左侧 ABCD 选择，然后点击预览 Prompt</p>
+              </div>
+            </Card>
+          )}
+        </div>
+      </div>
 
       {/* Image Lightbox */}
       <ImageLightbox
-        images={images
-          .filter((img) => img.status === "success")
-          .map((img) => ({
-            id: img.id,
-            url: img.url,
-            storageUrl: img.storageUrl,
-            rating: img.rating,
-          }))}
+        images={successfulImages.map(img => ({
+          id: img.id,
+          url: img.url,
+          storageUrl: img.storageUrl,
+          rating: img.rating ?? 0,
+        }))}
         currentIndex={lightboxIndex}
         isOpen={lightboxOpen}
         onClose={() => setLightboxOpen(false)}
-        onRatingChange={(id, rating) => {
-          setImages((prev) =>
-            prev.map((img) => (img.id === id ? { ...img, rating } : img))
-          );
-        }}
-        onNavigate={(index) => setLightboxIndex(index)}
+        onRatingChange={handleRatingChange}
+        onNavigate={setLightboxIndex}
       />
     </div>
-  );
-}
-
-// Helper component for step indicator
-function ChevronRight({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <path d="m9 18 6-6-6-6" />
-    </svg>
   );
 }
