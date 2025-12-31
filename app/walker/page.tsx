@@ -443,9 +443,10 @@ export default function WalkerPage() {
       const data = await response.json();
 
       if (data.success) {
-        setPrompt(data.data.prompt);
-        setEditedPrompt(data.data.prompt);
-        setLocalEditedPrompt(data.data.prompt);
+        const generatedPrompt = data.data.prompt;
+        setPrompt(generatedPrompt);
+        setEditedPrompt(generatedPrompt);
+        setLocalEditedPrompt(generatedPrompt);
         setWalkerState(data.data.walkerState);
         setReferenceImageUrl(data.data.referenceImageUrl);
         setCreativeName(data.data.creativeName);
@@ -455,7 +456,7 @@ export default function WalkerPage() {
         const newVersion: PromptVersion = {
           id: `v1-${Date.now()}`,
           version: 1,
-          englishPrompt: data.data.prompt,
+          englishPrompt: generatedPrompt,
           chinesePrompt: "",
           videoPrompt: "",
           createdAt: new Date().toISOString(),
@@ -465,6 +466,10 @@ export default function WalkerPage() {
         setCurrentVersionNumber(1);
         setChinesePrompt("");
         setVideoPrompt("");
+
+        // Start translation immediately for better UX
+        // Cloud sync will happen later when session is created
+        translatePromptInBackground(generatedPrompt, 1);
       } else {
         setError(data.error?.message || "Failed to generate prompt");
       }
@@ -605,7 +610,201 @@ export default function WalkerPage() {
     }
   };
 
-  // Background translation helper
+  // ============================================================================
+  // Cloud Sync Functions - Save versions to Supabase for cross-device access
+  // ============================================================================
+
+  // Save a prompt version to cloud (called after session is created)
+  const syncVersionToCloud = async (
+    sessionId: string,
+    versionData: {
+      prompt: string;
+      prompt_chinese?: string;
+      video_prompt?: string;
+      product_state: string;
+      reference_image_url: string;
+      created_from: "initial" | "refinement" | "product_state_change";
+      refinement_instruction?: string;
+    },
+    versionNumber?: number
+  ): Promise<string | null> => {
+    try {
+      console.log(`[Walker] Syncing V${versionNumber} to session ${sessionId}...`);
+
+      const response = await fetch(`/api/sessions/${sessionId}/versions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(versionData),
+      });
+      const data = await response.json();
+
+      if (data.success && data.data?.version?.id) {
+        const cloudId = data.data.version.id;
+        const syncedVersionNumber = data.data.version_number || versionNumber;
+        console.log(`[Walker] SUCCESS: V${syncedVersionNumber} synced with cloudId: ${cloudId}`);
+
+        if (syncedVersionNumber) {
+          promptVersionsRef.current = promptVersionsRef.current.map(v =>
+            v.version === syncedVersionNumber
+              ? { ...v, cloudId, synced: true }
+              : v
+          );
+          setPromptVersions(prev => prev.map(v =>
+            v.version === syncedVersionNumber
+              ? { ...v, cloudId, synced: true }
+              : v
+          ));
+        }
+
+        return cloudId;
+      }
+
+      const errorMsg = data.error?.message || "Unknown error";
+      console.error(`[Walker] FAILED to sync: ${errorMsg}`);
+      return null;
+    } catch (err) {
+      console.error("[Walker] syncVersionToCloud EXCEPTION:", err);
+      return null;
+    }
+  };
+
+  // Update Chinese translation in cloud (with retry for pending sync)
+  const updateCloudVersionChinese = async (
+    sessionId: string,
+    versionNumber: number,
+    chineseText: string,
+    retryCount: number = 0
+  ) => {
+    const MAX_RETRIES = 5;
+    const RETRY_DELAY_MS = 1000;
+
+    const version = promptVersionsRef.current.find(v => v.version === versionNumber);
+
+    if (!version?.cloudId) {
+      if (retryCount < MAX_RETRIES) {
+        console.log(`[Walker] V${versionNumber} cloudId not ready, retrying in ${RETRY_DELAY_MS}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+        setTimeout(() => {
+          updateCloudVersionChinese(sessionId, versionNumber, chineseText, retryCount + 1);
+        }, RETRY_DELAY_MS);
+        return;
+      }
+      console.warn(`[Walker] V${versionNumber} cloudId still not available after ${MAX_RETRIES} retries`);
+      return;
+    }
+
+    try {
+      console.log(`[Walker] Updating V${versionNumber} Chinese translation in cloud...`);
+      const response = await fetch(`/api/sessions/${sessionId}/versions/${version.cloudId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt_chinese: chineseText }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        console.log(`[Walker] SUCCESS: Updated Chinese for V${versionNumber} in cloud`);
+      } else {
+        console.warn("[Walker] FAILED to update Chinese:", data.error);
+      }
+    } catch (err) {
+      console.error("[Walker] updateCloudVersionChinese EXCEPTION:", err);
+    }
+  };
+
+  // Update video prompt in cloud (with retry for pending sync)
+  const updateCloudVersionVideoPrompt = async (
+    sessionId: string,
+    versionNumber: number,
+    videoPromptText: string,
+    retryCount: number = 0
+  ) => {
+    const MAX_RETRIES = 5;
+    const RETRY_DELAY_MS = 1000;
+
+    const version = promptVersionsRef.current.find(v => v.version === versionNumber);
+
+    if (!version?.cloudId) {
+      if (retryCount < MAX_RETRIES) {
+        console.log(`[Walker] V${versionNumber} cloudId not ready for video prompt, retrying in ${RETRY_DELAY_MS}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+        setTimeout(() => {
+          updateCloudVersionVideoPrompt(sessionId, versionNumber, videoPromptText, retryCount + 1);
+        }, RETRY_DELAY_MS);
+        return;
+      }
+      console.warn(`[Walker] V${versionNumber} cloudId still not available after ${MAX_RETRIES} retries`);
+      return;
+    }
+
+    try {
+      console.log(`[Walker] Updating V${versionNumber} video prompt in cloud...`);
+      const response = await fetch(`/api/sessions/${sessionId}/versions/${version.cloudId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ video_prompt: videoPromptText }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        console.log(`[Walker] SUCCESS: Updated video prompt for V${versionNumber} in cloud`);
+      } else {
+        console.warn("[Walker] FAILED to update video prompt:", data.error);
+      }
+    } catch (err) {
+      console.error("[Walker] updateCloudVersionVideoPrompt EXCEPTION:", err);
+    }
+  };
+
+  // Update version's video prompt locally
+  const updateVersionVideoPrompt = (versionNumber: number, videoPromptText: string) => {
+    promptVersionsRef.current = promptVersionsRef.current.map(v =>
+      v.version === versionNumber
+        ? { ...v, videoPrompt: videoPromptText }
+        : v
+    );
+    setPromptVersions(prev => prev.map(v =>
+      v.version === versionNumber
+        ? { ...v, videoPrompt: videoPromptText }
+        : v
+    ));
+  };
+
+  // Ensure current version has cloudId (wait for sync if needed)
+  const ensureVersionCloudId = async (sessionId: string, version: PromptVersion): Promise<string | null> => {
+    if (version.cloudId) {
+      return version.cloudId;
+    }
+
+    console.log(`[Walker] V${version.version} has no cloudId, checking if it exists in cloud...`);
+    const existingVersions = await loadVersionsFromCloud(sessionId);
+    const existingVersion = existingVersions.find(v => v.version === version.version);
+
+    if (existingVersion?.cloudId) {
+      console.log(`[Walker] V${version.version} found in cloud with ID: ${existingVersion.cloudId}`);
+      promptVersionsRef.current = promptVersionsRef.current.map(v =>
+        v.version === version.version
+          ? { ...v, cloudId: existingVersion.cloudId, synced: true }
+          : v
+      );
+      setPromptVersions(prev => prev.map(v =>
+        v.version === version.version
+          ? { ...v, cloudId: existingVersion.cloudId, synced: true }
+          : v
+      ));
+      return existingVersion.cloudId;
+    }
+
+    console.log(`[Walker] V${version.version} not found in cloud, creating...`);
+    const cloudId = await syncVersionToCloud(sessionId, {
+      prompt: version.englishPrompt,
+      prompt_chinese: version.chinesePrompt,
+      video_prompt: version.videoPrompt,
+      product_state: walkerState,
+      reference_image_url: referenceImageUrl,
+      created_from: "initial",
+    }, version.version);
+
+    return cloudId;
+  };
+
+  // Background translation helper - updates existing version's Chinese translation
   const translatePromptInBackground = async (promptText: string, versionNumber: number) => {
     setIsTranslating(true);
     setChinesePrompt("");
@@ -621,7 +820,16 @@ export default function WalkerPage() {
         const translatedText = data.data.translatedPrompt;
         setChinesePrompt(translatedText);
         updateVersionChinesePrompt(versionNumber, translatedText);
-        console.log(`[Walker] V${versionNumber} translated`);
+        console.log(`[Walker] V${versionNumber} translated locally`);
+
+        // Also update in cloud if session exists
+        const sessionId = currentSessionIdRef.current;
+        if (sessionId) {
+          console.log(`[Walker] Syncing V${versionNumber} Chinese to cloud (sessionId: ${sessionId})...`);
+          updateCloudVersionChinese(sessionId, versionNumber, translatedText);
+        } else {
+          console.log(`[Walker] No sessionId yet for V${versionNumber}, will sync when session is created`);
+        }
       }
     } catch (err) {
       console.error("[Walker] Background translation failed:", err);
@@ -657,14 +865,30 @@ export default function WalkerPage() {
         setPrompt(refinedPrompt);
         setEditedPrompt(refinedPrompt);
         setLocalEditedPrompt(refinedPrompt);
+        const savedInstruction = localRefinementInput.trim();
         setRefinementInput("");
         setLocalRefinementInput("");
 
         // Create new version
         const newVersionNumber = createPromptVersion(refinedPrompt);
 
-        // Start translation
-        translatePromptInBackground(refinedPrompt, newVersionNumber);
+        // Sync to cloud if we have a session, then start translation
+        if (currentSessionId) {
+          syncVersionToCloud(currentSessionId, {
+            prompt: refinedPrompt,
+            product_state: walkerState,
+            reference_image_url: referenceImageUrl,
+            created_from: "refinement",
+            refinement_instruction: savedInstruction,
+          }, newVersionNumber).then(cloudId => {
+            console.log(`[Walker] V${newVersionNumber} synced to cloud with ID: ${cloudId}`);
+            if (cloudId) {
+              translatePromptInBackground(refinedPrompt, newVersionNumber);
+            }
+          });
+        } else {
+          translatePromptInBackground(refinedPrompt, newVersionNumber);
+        }
       } else {
         setError(data.error?.message || "Failed to refine prompt");
       }
@@ -676,7 +900,7 @@ export default function WalkerPage() {
     }
   };
 
-  // Translate prompt
+  // Translate prompt (manual trigger)
   const handleTranslatePrompt = async () => {
     if (!editedPrompt) return;
     setIsTranslating(true);
@@ -690,7 +914,15 @@ export default function WalkerPage() {
 
       const data = await response.json();
       if (data.success) {
-        setChinesePrompt(data.data.translatedPrompt);
+        const translatedText = data.data.translatedPrompt;
+        setChinesePrompt(translatedText);
+        // Update version locally
+        updateVersionChinesePrompt(currentVersionNumber, translatedText);
+        // Sync to cloud if session exists
+        const sessionId = currentSessionIdRef.current;
+        if (sessionId) {
+          updateCloudVersionChinese(sessionId, currentVersionNumber, translatedText);
+        }
       }
     } catch (err) {
       console.error("[Walker] Translation error:", err);
@@ -703,6 +935,8 @@ export default function WalkerPage() {
   const handleGenerateVideoPrompt = async () => {
     if (!editedPrompt) return;
     setIsGeneratingVideoPrompt(true);
+    setError("");
+    console.log(`[Walker] Generating video prompt for V${currentVersionNumber}...`);
 
     try {
       const response = await fetch("/api/generate-video-prompt", {
@@ -713,9 +947,25 @@ export default function WalkerPage() {
 
       const data = await response.json();
       if (data.success) {
-        setVideoPrompt(data.data.videoPrompt);
+        const generatedVideoPrompt = data.data.videoPrompt;
+        setVideoPrompt(generatedVideoPrompt);
+        // Update version locally
+        updateVersionVideoPrompt(currentVersionNumber, generatedVideoPrompt);
+        console.log(`[Walker] V${currentVersionNumber} video prompt generated`);
+
+        // Sync to cloud if session exists
+        const sessionId = currentSessionIdRef.current;
+        if (sessionId) {
+          console.log(`[Walker] Syncing V${currentVersionNumber} video prompt to cloud...`);
+          updateCloudVersionVideoPrompt(sessionId, currentVersionNumber, generatedVideoPrompt);
+        } else {
+          console.log(`[Walker] No sessionId yet for V${currentVersionNumber}, will sync when session is created`);
+        }
+      } else {
+        setError(data.error?.message || "生成 Video Prompt 失败");
       }
     } catch (err) {
+      setError("网络错误，请重试");
       console.error("[Walker] Video prompt error:", err);
     } finally {
       setIsGeneratingVideoPrompt(false);
@@ -792,8 +1042,55 @@ export default function WalkerPage() {
 
     // Create session if not exists
     let activeSessionId = currentSessionIdRef.current;
+    let isNewSession = false;
     if (!activeSessionId) {
       activeSessionId = await createWalkerSession(endIndex);
+      isNewSession = true;
+      if (!activeSessionId) {
+        setError("创建会话失败");
+        setIsGeneratingImages(false);
+        return;
+      }
+
+      // Sync V1 to cloud after session is created
+      const currentVersion = promptVersionsRef.current.find(v => v.version === currentVersionNumber);
+      if (currentVersion && !currentVersion.cloudId) {
+        const versionToSync = currentVersionNumber;
+        console.log(`[Walker] Syncing V${versionToSync} to newly created session ${activeSessionId}...`);
+        syncVersionToCloud(activeSessionId, {
+          prompt: currentVersion.englishPrompt,
+          prompt_chinese: currentVersion.chinesePrompt,
+          video_prompt: currentVersion.videoPrompt,
+          product_state: walkerState,
+          reference_image_url: referenceImageUrl,
+          created_from: "initial",
+        }, versionToSync).then(cloudId => {
+          if (cloudId) {
+            console.log(`[Walker] V${versionToSync} synced with cloudId: ${cloudId}`);
+            // Sync Chinese and video prompt if they exist
+            const latestVersion = promptVersionsRef.current.find(v => v.version === versionToSync);
+            if (latestVersion?.chinesePrompt) {
+              updateCloudVersionChinese(activeSessionId!, versionToSync, latestVersion.chinesePrompt);
+            }
+            if (latestVersion?.videoPrompt) {
+              updateCloudVersionVideoPrompt(activeSessionId!, versionToSync, latestVersion.videoPrompt);
+            }
+          }
+        });
+      }
+    }
+
+    // Ensure current version has cloudId before generating images
+    const currentVersion = promptVersionsRef.current.find(v => v.version === currentVersionNumber);
+    let versionCloudId: string | null = null;
+
+    if (currentVersion && activeSessionId) {
+      versionCloudId = await ensureVersionCloudId(activeSessionId, currentVersion);
+      if (versionCloudId) {
+        console.log(`[Walker] V${currentVersionNumber} has cloudId: ${versionCloudId}, images will be linked`);
+      } else {
+        console.warn(`[Walker] Failed to get cloudId for V${currentVersionNumber}, images will NOT be linked to version`);
+      }
     }
 
     // Generate images sequentially
