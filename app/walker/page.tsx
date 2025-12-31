@@ -559,6 +559,123 @@ export default function WalkerPage() {
     setCreativeName("");
   };
 
+  // Create a new prompt version for current session
+  const createPromptVersion = (englishText: string, chineseText: string = ""): number => {
+    const newVersionNumber = promptVersionsRef.current.length + 1;
+
+    const newVersion: PromptVersion = {
+      id: `v${newVersionNumber}-${Date.now()}`,
+      version: newVersionNumber,
+      englishPrompt: englishText,
+      chinesePrompt: chineseText,
+      videoPrompt: "",
+      createdAt: new Date().toISOString(),
+    };
+
+    promptVersionsRef.current = [...promptVersionsRef.current, newVersion];
+    setPromptVersions(prev => [...prev, newVersion]);
+    setCurrentVersionNumber(newVersionNumber);
+    setVideoPrompt("");
+
+    console.log(`[Walker] Created version V${newVersionNumber}`);
+    return newVersionNumber;
+  };
+
+  // Update Chinese translation for a specific version
+  const updateVersionChinesePrompt = (versionNumber: number, chineseText: string) => {
+    if (versionNumber <= 0) return;
+    promptVersionsRef.current = promptVersionsRef.current.map(v =>
+      v.version === versionNumber ? { ...v, chinesePrompt: chineseText } : v
+    );
+    setPromptVersions(prev =>
+      prev.map(v => v.version === versionNumber ? { ...v, chinesePrompt: chineseText } : v)
+    );
+  };
+
+  // Switch to a different prompt version
+  const switchToVersion = (versionNumber: number) => {
+    const version = promptVersions.find(v => v.version === versionNumber);
+    if (version) {
+      setCurrentVersionNumber(versionNumber);
+      setEditedPrompt(version.englishPrompt);
+      setLocalEditedPrompt(version.englishPrompt);
+      setPrompt(version.englishPrompt);
+      setChinesePrompt(version.chinesePrompt);
+      setVideoPrompt(version.videoPrompt || "");
+    }
+  };
+
+  // Background translation helper
+  const translatePromptInBackground = async (promptText: string, versionNumber: number) => {
+    setIsTranslating(true);
+    setChinesePrompt("");
+    console.log(`[Walker] Starting translation for V${versionNumber}...`);
+    try {
+      const response = await fetch("/api/translate-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: promptText }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        const translatedText = data.data.translatedPrompt;
+        setChinesePrompt(translatedText);
+        updateVersionChinesePrompt(versionNumber, translatedText);
+        console.log(`[Walker] V${versionNumber} translated`);
+      }
+    } catch (err) {
+      console.error("[Walker] Background translation failed:", err);
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
+  // Handle Prompt Refinement
+  const handleRefinePrompt = async () => {
+    if (!refinementInput.trim() || !editedPrompt) {
+      return;
+    }
+
+    setIsRefining(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/refine-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          originalPrompt: editedPrompt,
+          refinementInstruction: refinementInput.trim(),
+          productState: walkerState,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        const refinedPrompt = data.data.refinedPrompt;
+        setPrompt(refinedPrompt);
+        setEditedPrompt(refinedPrompt);
+        setLocalEditedPrompt(refinedPrompt);
+        setRefinementInput("");
+        setLocalRefinementInput("");
+
+        // Create new version
+        const newVersionNumber = createPromptVersion(refinedPrompt);
+
+        // Start translation
+        translatePromptInBackground(refinedPrompt, newVersionNumber);
+      } else {
+        setError(data.error?.message || "Failed to refine prompt");
+      }
+    } catch (err) {
+      setError("Network error. Please try again.");
+      console.error("[Walker]", err);
+    } finally {
+      setIsRefining(false);
+    }
+  };
+
   // Translate prompt
   const handleTranslatePrompt = async () => {
     if (!editedPrompt) return;
@@ -787,12 +904,28 @@ export default function WalkerPage() {
     });
   };
 
-  // Handle rating change
-  const handleRatingChange = (imageId: string, rating: number) => {
+  // Handle rating change - with database persistence
+  const handleRatingChange = useCallback(async (id: string, rating: number) => {
+    // Optimistic update - update UI immediately
     setImages(prev => prev.map(img =>
-      img.id === imageId ? { ...img, rating } : img
+      img.id === id ? { ...img, rating } : img
     ));
-  };
+
+    // Persist to database
+    try {
+      const response = await fetch(`/api/images/${id}/rating`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save rating');
+      }
+    } catch (error) {
+      console.error('[Walker] Failed to save rating:', error);
+    }
+  }, []);
 
   // Computed values
   const successfulImages = useMemo(() =>
@@ -960,13 +1093,82 @@ export default function WalkerPage() {
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-4">
+                  {/* Version Selector */}
+                  {promptVersions.length > 0 && (
+                    <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
+                      <History className="h-4 w-4 text-amber-600" />
+                      <span className="text-sm font-medium text-amber-700 dark:text-amber-300">Prompt 版本</span>
+                      <div className="flex gap-1 flex-wrap">
+                        {promptVersions.map((v) => (
+                          <button
+                            key={v.id}
+                            onClick={() => switchToVersion(v.version)}
+                            className={cn(
+                              "px-3 py-1 rounded-full text-xs font-medium transition-all",
+                              currentVersionNumber === v.version
+                                ? "bg-amber-600 text-white"
+                                : "bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-800"
+                            )}
+                          >
+                            V{v.version}
+                          </button>
+                        ))}
+                      </div>
+                      <span className="text-xs text-muted-foreground ml-auto">
+                        当前: V{currentVersionNumber}
+                      </span>
+                    </div>
+                  )}
+
                   <Textarea
                     value={localEditedPrompt}
                     onChange={handleEditedPromptChange}
                     className="min-h-[200px] font-mono text-sm"
                     placeholder="生成的 Walker 广告 Prompt 将显示在这里..."
                   />
+
+                  {/* Prompt Refinement */}
+                  <div className="p-4 bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-lg border border-purple-500/20">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Wand2 className="h-4 w-4 text-purple-500" />
+                      <label className="text-sm font-medium">AI Prompt 微调</label>
+                      <span className="text-xs text-muted-foreground">输入修改建议，AI 将自动调整 Prompt</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={localRefinementInput}
+                        onChange={handleRefinementInputChange}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !isRefining && localRefinementInput.trim()) {
+                            setRefinementInput(localRefinementInput);
+                            handleRefinePrompt();
+                          }
+                        }}
+                        placeholder="例如：我希望场景更加温馨..."
+                        className="flex-1 h-10 px-3 rounded-md border border-input bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                        disabled={isRefining || !editedPrompt}
+                      />
+                      <Button
+                        onClick={handleRefinePrompt}
+                        disabled={isRefining || !localRefinementInput.trim() || !editedPrompt}
+                        className="bg-purple-600 hover:bg-purple-700"
+                      >
+                        {isRefining ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            微调中...
+                          </>
+                        ) : (
+                          <>
+                            <Send className="mr-2 h-4 w-4" />
+                            微调
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
 
