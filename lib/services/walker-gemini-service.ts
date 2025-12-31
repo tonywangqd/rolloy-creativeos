@@ -27,7 +27,7 @@ const IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-3-pro-image-previe
 
 // Walker-specific reference images (different from Rollator)
 const WALKER_IN_USE_IMAGE_URL = process.env.NEXT_PUBLIC_WALKER_IN_USE_IMAGE_URL || '';
-const WALKER_FOLDED_IMAGE_URL = process.env.NEXT_PUBLIC_WALKER_FOLDED_IMAGE_URL || '';
+const WALKER_STORED_IMAGE_URL = process.env.NEXT_PUBLIC_WALKER_STORED_IMAGE_URL || '';
 
 // Config file path for walker system prompt
 const WALKER_CONFIG_FILE = path.join(process.cwd(), 'config', 'walker-system-prompt.json');
@@ -127,7 +127,7 @@ export function determineWalkerState(action: string): WalkerState {
 }
 
 export function getWalkerReferenceImageUrl(state: WalkerState): string {
-  return state === 'IN_USE' ? WALKER_IN_USE_IMAGE_URL : WALKER_FOLDED_IMAGE_URL;
+  return state === 'IN_USE' ? WALKER_IN_USE_IMAGE_URL : WALKER_STORED_IMAGE_URL;
 }
 
 // ============================================================================

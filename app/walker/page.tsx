@@ -488,7 +488,7 @@ export default function WalkerPage() {
     setReferenceImageUrl(
       newState === "IN_USE"
         ? process.env.NEXT_PUBLIC_WALKER_IN_USE_IMAGE_URL || ""
-        : process.env.NEXT_PUBLIC_WALKER_FOLDED_IMAGE_URL || ""
+        : process.env.NEXT_PUBLIC_WALKER_STORED_IMAGE_URL || ""
     );
 
     if (oldState && oldState !== newState && editedPrompt) {
