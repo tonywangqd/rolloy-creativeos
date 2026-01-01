@@ -1,7 +1,9 @@
 #!/bin/bash
 
 # Walker API 兼容性测试脚本
-# 用于验证 Sessions API 是否支持 Walker 产品状态
+# 用于验证 Sessions API 是否支持 Walker 产品
+# 
+# 更新: 2026-01-01 - Walker 现使用 FOLDED/UNFOLDED 状态 (与 Rollator 统一)
 
 set -e
 
@@ -22,14 +24,15 @@ BASE_URL="${API_BASE_URL:-http://localhost:3000}"
 echo "测试环境: $BASE_URL"
 echo ""
 
-# 测试 1: Walker 状态 - IN_USE
-echo "测试 1: 创建 Walker Session (IN_USE 状态)"
+# 测试 1: Walker 状态 - UNFOLDED (展开使用中)
+echo "测试 1: 创建 Walker Session (UNFOLDED 状态)"
 echo "----------------------------------------------------"
 
 RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/sessions" \
   -H "Content-Type: application/json" \
   -d '{
-    "creative_name": "Test Walker IN_USE",
+    "creative_name": "Test Walker UNFOLDED",
+    "product_type": "walker",
     "abcd_selection": {
       "A1": "outdoor",
       "A2": "park",
@@ -38,8 +41,8 @@ RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/sessions" \
       "D": "carousel"
     },
     "prompt": "A senior man walking confidently with a standard walker in a park",
-    "product_state": "IN_USE",
-    "reference_image_url": "https://example.com/walker-in-use.jpg",
+    "product_state": "UNFOLDED",
+    "reference_image_url": "https://example.com/walker-unfolded.jpg",
     "total_images": 20
   }')
 
@@ -47,36 +50,27 @@ HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
 BODY=$(echo "$RESPONSE" | sed '$d')
 
 if [ "$HTTP_CODE" -eq 201 ]; then
-  echo -e "${GREEN}✅ PASS${NC}: Walker IN_USE 状态被接受"
+  echo -e "${GREEN}✅ PASS${NC}: Walker UNFOLDED 状态被接受"
   echo "Response: $BODY"
   SESSION_ID=$(echo "$BODY" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
   echo "Session ID: $SESSION_ID"
 else
-  echo -e "${RED}❌ FAIL${NC}: Walker IN_USE 状态被拒绝 (HTTP $HTTP_CODE)"
+  echo -e "${RED}❌ FAIL${NC}: Walker UNFOLDED 状态被拒绝 (HTTP $HTTP_CODE)"
   echo "Response: $BODY"
-
-  # 检查错误消息
-  if echo "$BODY" | grep -q "must be FOLDED or UNFOLDED"; then
-    echo -e "${RED}🔴 CRITICAL${NC}: Sessions API 硬编码了 Rollator 状态验证"
-    echo ""
-    echo "修复建议:"
-    echo "1. 修改 /app/api/sessions/route.ts:64-75"
-    echo "2. 移除硬编码的状态验证或添加产品类型支持"
-    echo "3. 参考 QA_EXECUTIVE_SUMMARY.md 中的修复方案"
-  fi
 fi
 
 echo ""
 echo ""
 
-# 测试 2: Walker 状态 - STORED
-echo "测试 2: 创建 Walker Session (STORED 状态)"
+# 测试 2: Walker 状态 - FOLDED (收折存放)
+echo "测试 2: 创建 Walker Session (FOLDED 状态)"
 echo "----------------------------------------------------"
 
 RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/sessions" \
   -H "Content-Type: application/json" \
   -d '{
-    "creative_name": "Test Walker STORED",
+    "creative_name": "Test Walker FOLDED",
+    "product_type": "walker",
     "abcd_selection": {
       "A1": "indoor",
       "A2": "home",
@@ -84,9 +78,9 @@ RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/sessions" \
       "C": "safety",
       "D": "single_image"
     },
-    "prompt": "A standard walker stored neatly against the wall",
-    "product_state": "STORED",
-    "reference_image_url": "https://example.com/walker-stored.jpg",
+    "prompt": "A standard walker folded neatly against the wall",
+    "product_state": "FOLDED",
+    "reference_image_url": "https://example.com/walker-folded.jpg",
     "total_images": 20
   }')
 
@@ -94,10 +88,10 @@ HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
 BODY=$(echo "$RESPONSE" | sed '$d')
 
 if [ "$HTTP_CODE" -eq 201 ]; then
-  echo -e "${GREEN}✅ PASS${NC}: Walker STORED 状态被接受"
+  echo -e "${GREEN}✅ PASS${NC}: Walker FOLDED 状态被接受"
   echo "Response: $BODY"
 else
-  echo -e "${RED}❌ FAIL${NC}: Walker STORED 状态被拒绝 (HTTP $HTTP_CODE)"
+  echo -e "${RED}❌ FAIL${NC}: Walker FOLDED 状态被拒绝 (HTTP $HTTP_CODE)"
   echo "Response: $BODY"
 fi
 
@@ -112,6 +106,7 @@ RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/sessions" \
   -H "Content-Type: application/json" \
   -d '{
     "creative_name": "Test Rollator FOLDED",
+    "product_type": "rollator",
     "abcd_selection": {
       "A1": "indoor",
       "A2": "home",
@@ -165,10 +160,10 @@ if [ "$HTTP_CODE" -eq 200 ]; then
   WALKER_STATE=$(echo "$BODY" | grep -o '"walkerState":"[^"]*"' | cut -d'"' -f4)
   echo "Walker State: $WALKER_STATE"
 
-  if [ "$WALKER_STATE" = "IN_USE" ] || [ "$WALKER_STATE" = "STORED" ]; then
+  if [ "$WALKER_STATE" = "FOLDED" ] || [ "$WALKER_STATE" = "UNFOLDED" ]; then
     echo -e "${GREEN}✅${NC} Walker 状态正确: $WALKER_STATE"
   else
-    echo -e "${YELLOW}⚠️${NC} Walker 状态异常: $WALKER_STATE"
+    echo -e "${YELLOW}⚠️${NC} Walker 状态异常: $WALKER_STATE (应为 FOLDED 或 UNFOLDED)"
   fi
 else
   echo -e "${RED}❌ FAIL${NC}: Walker Prompt 生成 API 失败 (HTTP $HTTP_CODE)"
@@ -184,20 +179,10 @@ echo "测试总结"
 echo "=================================================="
 echo ""
 
-# 计算通过的测试数量
-PASS_COUNT=0
-FAIL_COUNT=0
-
-# 简单的总结 (需要手动根据上面的测试结果判断)
-echo "详细结果请查看上方输出"
+echo "Walker 现使用统一的产品状态:"
+echo "- UNFOLDED: 展开使用中 (用户站在助行器框架内)"
+echo "- FOLDED: 收折存放 (折叠后便于存储/运输)"
 echo ""
-echo "关键问题:"
-echo "- 如果测试 1 和测试 2 失败，说明 Sessions API 不支持 Walker 状态"
-echo "- 这是 P0 阻塞问题，必须立即修复"
-echo ""
-echo "修复方案:"
-echo "1. 打开 /app/api/sessions/route.ts"
-echo "2. 定位到第 64-75 行的 product_state 验证逻辑"
-echo "3. 参考 QA_EXECUTIVE_SUMMARY.md 中的修复代码"
+echo "这与 Rollator 使用相同的状态命名，保持代码一致性。"
 echo ""
 echo "=================================================="

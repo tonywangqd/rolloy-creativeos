@@ -113,15 +113,15 @@ export async function POST(
       );
     }
 
-    // Validate product_state (support both Rollator and Walker states)
-    const validProductStates = ['FOLDED', 'UNFOLDED', 'IN_USE', 'STORED'];
+    // Validate product_state (both Rollator and Walker use FOLDED/UNFOLDED)
+    const validProductStates = ['FOLDED', 'UNFOLDED'];
     if (!validProductStates.includes(product_state)) {
       return NextResponse.json<APIResponse>(
         {
           success: false,
           error: {
             code: 'INVALID_REQUEST',
-            message: 'Invalid product_state: must be FOLDED, UNFOLDED (rollator) or IN_USE, STORED (walker)',
+            message: 'Invalid product_state: must be FOLDED or UNFOLDED',
           },
         },
         { status: 400 }

@@ -14,18 +14,18 @@
 export type ProductType = 'rollator' | 'walker';
 
 /**
- * Product State - State varies by product type
- * - Rollator: FOLDED (收折状态) / UNFOLDED (展开使用状态)
- * - Walker: IN_USE (使用中) / STORED (收纳状态)
+ * Product State - Both Rollator and Walker use the same states
+ * - FOLDED: 收折状态 (folded for storage/transport)
+ * - UNFOLDED: 展开使用状态 (unfolded for active use)
  */
-export type ProductState = 'FOLDED' | 'UNFOLDED' | 'IN_USE' | 'STORED';
+export type ProductState = 'FOLDED' | 'UNFOLDED';
 
 /**
- * Valid states per product type
+ * Valid states per product type - both products use FOLDED/UNFOLDED
  */
 export const VALID_PRODUCT_STATES: Record<ProductType, ProductState[]> = {
   rollator: ['FOLDED', 'UNFOLDED'],
-  walker: ['IN_USE', 'STORED'],
+  walker: ['FOLDED', 'UNFOLDED'],
 };
 
 /**
@@ -79,7 +79,7 @@ export interface GenerationSession {
 
   // Product Configuration
   product_type: ProductType;  // 'rollator' or 'walker'
-  product_state: ProductState; // Rollator: FOLDED/UNFOLDED, Walker: IN_USE/STORED
+  product_state: ProductState; // Both products: FOLDED/UNFOLDED
 
   // Generation Parameters
   prompt: string;
@@ -207,7 +207,7 @@ export interface CreateSessionRequest {
   };
   prompt: string;
   product_type?: ProductType;  // Default: 'rollator' (backward compatible)
-  product_state: ProductState; // Rollator: FOLDED/UNFOLDED, Walker: IN_USE/STORED
+  product_state: ProductState; // Both products: FOLDED/UNFOLDED
   reference_image_url: string;
   total_images?: number;      // Default: 20
   strength?: number;          // Default: 0.75

@@ -36,7 +36,7 @@ interface GenerateWalkerSingleRequest {
   promptVersionId?: string;
   aspectRatio?: string;
   resolution?: string;
-  walkerState?: 'IN_USE' | 'STORED';
+  walkerState?: 'FOLDED' | 'UNFOLDED';
 }
 
 interface APIResponse<T = unknown> {
@@ -226,7 +226,7 @@ export async function POST(request: NextRequest) {
       promptVersionId,
       aspectRatio = '1:1',
       resolution = '1K',
-      walkerState = 'IN_USE',
+      walkerState = 'UNFOLDED',
     } = body;
 
     console.log(`[Walker] Request: imageIndex=${imageIndex}, sessionId=${sessionId}, walkerState=${walkerState}`);
@@ -234,21 +234,21 @@ export async function POST(request: NextRequest) {
     // Walker-specific scale instructions based on state
     // Standard Walker dimensions are different from Rollator
     const scaleInstruction =
-      walkerState === 'STORED'
+      walkerState === 'FOLDED'
         ? `MANDATORY SCALE CONSTRAINT:
-Product Dimensions (STORED/FOLDED): Height 85cm (33 inches), Width 60cm (24 inches), Depth 8cm (3 inches) when folded flat.
+Product Dimensions (FOLDED): Height 85cm (33 inches), Width 60cm (24 inches), Depth 8cm (3 inches) when folded flat.
 Size Reference: Folds flat like a large tablet or a folding chair. Can be stored behind a door or in a closet.
 Human Reference: When folded and held by a person, it reaches from hip to mid-chest level. Easy to carry with one hand.
 DO NOT generate an oversized product.`
         : `MANDATORY SCALE CONSTRAINT:
-Product Dimensions (IN USE): Handle height 80-95cm (32-37 inches) adjustable, Width 60-65cm (24-26 inches), Depth 45-50cm (18-20 inches).
+Product Dimensions (UNFOLDED): Handle height 80-95cm (32-37 inches) adjustable, Width 60-65cm (24-26 inches), Depth 45-50cm (18-20 inches).
 Size Reference: Handle height similar to waist to lower chest level. User stands INSIDE the frame, not behind it.
 Human Reference: For a 170cm (5'7") adult, the handles are at hip to waist height. The frame opening is wide enough for the user to stand within. The two front wheels are small (12cm/5 inches diameter).
 CRITICAL: This is a STANDARD WALKER (two front wheels + rear rubber tips), NOT a rollator. The user lifts it and places it forward.
 DO NOT generate an oversized product.`;
 
     const scaleNegativePrompt =
-      walkerState === 'STORED'
+      walkerState === 'FOLDED'
         ? `AVOID: oversized walker, walker larger than person's torso when folded, unrealistic proportions, giant equipment.`
         : `AVOID: oversized walker, handles above chest level, frame wider than user's arm span, unrealistic proportions, confusing with rollator (4 wheels), adding seats or brakes.`;
 

@@ -41,7 +41,7 @@ PROMPT STRUCTURE (MUST FOLLOW THIS ORDER):
 9. QUALITY STATEMENT (ALWAYS INCLUDE): "The image must be in a commercial photography style. It must be Photorealistic, Ultra high definition (UHD), super clear, and feature professional, bright, and clean commercial lighting."
 
 CRITICAL SIZE & SCALE RULES FOR STANDARD WALKER:
-- IN-USE STATE: The walker frame reaches approximately waist to chest height (80-95cm / 32-37 inches) when in use
+- UNFOLDED STATE: The walker frame reaches approximately waist to chest height (80-95cm / 32-37 inches) when in use
 - GRIP POSITION: User's hands grip the handles at hip to waist level, arms slightly bent for proper support
 - FRAME WIDTH: Approximately 60-65cm (24-26 inches) wide - enough for the user to stand within the frame
 - FRAME DEPTH: Approximately 45-50cm (18-20 inches) front to back
@@ -97,19 +97,19 @@ export function resetWalkerSystemPrompt(): void {
 }
 
 // Walker-specific action keywords for determining walker state
-// Standard walkers don't have the same FOLDED/UNFOLDED state as rollators
-// but they do have IN_USE vs STORED/CARRIED states
-export const WALKER_IN_USE_ACTIONS = [
+// Walker now uses FOLDED/UNFOLDED states (same as Rollator for consistency)
+export const WALKER_UNFOLDED_ACTIONS = [
   'walk', 'walking', 'step', 'stepping', 'stand', 'standing',
-  'move', 'moving', 'lift', 'lifting', 'support', 'supporting',
+  'move', 'moving', 'support', 'supporting',
   'exercise', 'exercising', 'therapy', 'rehabilitation', 'rehab',
-  'practice', 'practicing', 'balance', 'balancing'
+  'practice', 'practicing', 'balance', 'balancing',
+  'use', 'using', 'sit', 'turn', 'rest'
 ];
 
-export const WALKER_STORED_ACTIONS = [
+export const WALKER_FOLDED_ACTIONS = [
   'store', 'stored', 'carry', 'carrying', 'fold', 'folded',
   'transport', 'transporting', 'pack', 'packed', 'beside',
-  'lean', 'leaning', 'rest', 'resting', 'place', 'placed'
+  'lean', 'leaning', 'place', 'placed', 'lift', 'trunk'
 ];
 
 // Walker-specific scenes that differ from rollator

@@ -15,8 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 type WorkflowStep = "select" | "prompt" | "generate";
 
-// Walker-specific state: IN_USE or STORED (different from rollator's FOLDED/UNFOLDED)
-type WalkerState = "IN_USE" | "STORED";
+// Walker uses FOLDED/UNFOLDED states (same as Rollator for consistency)
+type WalkerState = "FOLDED" | "UNFOLDED";
 
 // Prompt Version for tracking history (per session)
 interface PromptVersion {
@@ -67,7 +67,7 @@ export default function WalkerPage() {
   const [prompt, setPrompt] = useState("");
   const [editedPrompt, setEditedPrompt] = useState("");
   const [localEditedPrompt, setLocalEditedPrompt] = useState("");
-  const [walkerState, setWalkerState] = useState<WalkerState>("IN_USE");
+  const [walkerState, setWalkerState] = useState<WalkerState>("UNFOLDED");
   const [referenceImageUrl, setReferenceImageUrl] = useState("");
   const [creativeName, setCreativeName] = useState("");
 
@@ -486,9 +486,9 @@ export default function WalkerPage() {
     const oldState = walkerState;
     setWalkerState(newState);
     setReferenceImageUrl(
-      newState === "IN_USE"
-        ? process.env.NEXT_PUBLIC_WALKER_IN_USE_IMAGE_URL || ""
-        : process.env.NEXT_PUBLIC_WALKER_STORED_IMAGE_URL || ""
+      newState === "UNFOLDED"
+        ? process.env.NEXT_PUBLIC_WALKER_UNFOLDED_IMAGE_URL || process.env.NEXT_PUBLIC_WALKER_IN_USE_IMAGE_URL || ""
+        : process.env.NEXT_PUBLIC_WALKER_FOLDED_IMAGE_URL || process.env.NEXT_PUBLIC_WALKER_STORED_IMAGE_URL || ""
     );
 
     if (oldState && oldState !== newState && editedPrompt) {
@@ -559,7 +559,7 @@ export default function WalkerPage() {
     promptVersionsRef.current = [];
     setPromptVersions([]);
     setCurrentVersionNumber(0);
-    setWalkerState("IN_USE");
+    setWalkerState("UNFOLDED");
     setReferenceImageUrl("");
     setCreativeName("");
   };
@@ -1337,26 +1337,26 @@ export default function WalkerPage() {
                     Walker 状态
                   </CardTitle>
                   <p className="text-sm text-muted-foreground">
-                    Standard Walker 可以是使用中或存放状态
+                    Standard Walker 可以是展开使用或收折状态
                   </p>
                 </CardHeader>
                 <CardContent>
                   <div className="flex gap-4">
                     <Button
-                      variant={walkerState === "IN_USE" ? "default" : "outline"}
-                      onClick={() => handleWalkerStateChange("IN_USE")}
+                      variant={walkerState === "UNFOLDED" ? "default" : "outline"}
+                      onClick={() => handleWalkerStateChange("UNFOLDED")}
                       className="flex-1"
                     >
                       <Play className="mr-2 h-4 w-4" />
-                      使用中 (IN_USE)
+                      展开使用 (UNFOLDED)
                     </Button>
                     <Button
-                      variant={walkerState === "STORED" ? "default" : "outline"}
-                      onClick={() => handleWalkerStateChange("STORED")}
+                      variant={walkerState === "FOLDED" ? "default" : "outline"}
+                      onClick={() => handleWalkerStateChange("FOLDED")}
                       className="flex-1"
                     >
                       <Pause className="mr-2 h-4 w-4" />
-                      存放 (STORED)
+                      收折 (FOLDED)
                     </Button>
                   </div>
                 </CardContent>

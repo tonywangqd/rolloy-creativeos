@@ -23,7 +23,7 @@ import {
 
 interface GenerateWalkerPromptRequest {
   selection: ABCDSelection;
-  forceWalkerState?: 'IN_USE' | 'STORED'; // Override auto-detected state
+  forceWalkerState?: 'FOLDED' | 'UNFOLDED'; // Override auto-detected state
 }
 
 interface GenerateWalkerPromptResponse {
@@ -90,8 +90,8 @@ export async function POST(request: NextRequest) {
     // Determine walker state:
     // 1. Use forceWalkerState if provided
     // 2. Otherwise use keyword-based detection
-    // Note: Walker states are IN_USE/STORED, not FOLDED/UNFOLDED like rollators
-    let walkerState: 'IN_USE' | 'STORED';
+    // Note: Walker uses FOLDED/UNFOLDED states (same as Rollator for consistency)
+    let walkerState: 'FOLDED' | 'UNFOLDED';
     if (forceWalkerState) {
       walkerState = forceWalkerState;
       console.log(`[Walker] Using forced walker state: ${walkerState}`);

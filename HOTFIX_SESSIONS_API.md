@@ -1,14 +1,19 @@
 # Sessions API Walker 兼容性紧急修复
 
 **优先级:** P0 - CRITICAL BLOCKER
-**预计修复时间:** 2 小时
-**影响范围:** Walker 创意工作台无法使用云端功能
+**状态:** ✅ 已修复 (2026-01-01)
+**影响范围:** Walker 创意工作台现在可以正常使用云端功能
 
 ---
 
-## 问题描述
+## 问题描述 (已解决)
 
-Sessions API 硬编码了 Rollator 的产品状态验证 (FOLDED/UNFOLDED)，导致 Walker 的状态 (IN_USE/STORED) 被拒绝。
+~~Sessions API 硬编码了 Rollator 的产品状态验证 (FOLDED/UNFOLDED)，导致 Walker 的状态 (IN_USE/STORED) 被拒绝。~~
+
+**解决方案:** Walker 现已统一使用 FOLDED/UNFOLDED 状态，与 Rollator 保持一致。这样设计的原因是：
+- 两种产品都有折叠和展开两种物理状态
+- 统一的状态命名减少代码复杂度
+- 便于未来扩展其他产品类型
 
 **错误消息:**
 ```json

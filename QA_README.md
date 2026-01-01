@@ -247,7 +247,7 @@ npm run lint
 
 - [ ] Walker ABCD 选择器功能正常
 - [ ] Walker Prompt 生成功能正常
-- [ ] Walker 状态切换 (IN_USE/STORED) 功能正常
+- [ ] Walker 状态切换 (FOLDED/UNFOLDED) 功能正常
 - [ ] Walker Prompt 翻译功能正常
 - [ ] Walker 视频 Prompt 生成功能正常
 - [ ] Walker 数据持久化到 localStorage

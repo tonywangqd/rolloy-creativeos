@@ -5,7 +5,7 @@
  * Specifically designed for Standard Walker (two-wheel walker) products
  *
  * Key differences from Rollator service:
- * - Walker has IN_USE/STORED states instead of FOLDED/UNFOLDED
+ * - Walker uses FOLDED/UNFOLDED states (same as Rollator for consistency)
  * - Different size and scale constraints
  * - Different movement patterns (lift-and-place gait)
  * - No seat, no brakes
@@ -25,9 +25,9 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const TEXT_MODEL = process.env.GEMINI_TEXT_MODEL || 'gemini-3-pro-preview';
 const IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-3-pro-image-preview';
 
-// Walker-specific reference images (different from Rollator)
-const WALKER_IN_USE_IMAGE_URL = process.env.NEXT_PUBLIC_WALKER_IN_USE_IMAGE_URL || '';
-const WALKER_STORED_IMAGE_URL = process.env.NEXT_PUBLIC_WALKER_STORED_IMAGE_URL || '';
+// Walker-specific reference images (using same naming convention as Rollator)
+const WALKER_UNFOLDED_IMAGE_URL = process.env.NEXT_PUBLIC_WALKER_UNFOLDED_IMAGE_URL || process.env.NEXT_PUBLIC_WALKER_IN_USE_IMAGE_URL || '';
+const WALKER_FOLDED_IMAGE_URL = process.env.NEXT_PUBLIC_WALKER_FOLDED_IMAGE_URL || process.env.NEXT_PUBLIC_WALKER_STORED_IMAGE_URL || '';
 
 // Config file path for walker system prompt
 const WALKER_CONFIG_FILE = path.join(process.cwd(), 'config', 'walker-system-prompt.json');
@@ -56,8 +56,8 @@ export interface ABCDSelection {
   D: string;   // Emotion/Format
 }
 
-// Walker has IN_USE and STORED states (different from Rollator's FOLDED/UNFOLDED)
-export type WalkerState = 'IN_USE' | 'STORED';
+// Walker uses FOLDED/UNFOLDED states (same as Rollator for consistency)
+export type WalkerState = 'FOLDED' | 'UNFOLDED';
 
 export interface WalkerGenerationResult {
   success: boolean;
@@ -102,32 +102,35 @@ export class WalkerGeminiAPIError extends Error {
 // State Router - Determines walker state based on Action (B)
 // ============================================================================
 
-const IN_USE_ACTIONS = [
+// UNFOLDED actions - walker is in active use, user stands inside the frame
+const UNFOLDED_ACTIONS = [
   'walk', 'walking', 'step', 'stepping', 'stand', 'standing',
   'move', 'moving', 'support', 'supporting', 'exercise', 'exercising',
   'therapy', 'rehabilitation', 'rehab', 'practice', 'practicing',
-  'balance', 'balancing', 'hold', 'holding', 'grip', 'gripping'
+  'balance', 'balancing', 'hold', 'holding', 'grip', 'gripping',
+  'use', 'using', 'sit', 'turn', 'rest'
 ];
 
-const STORED_ACTIONS = [
+// FOLDED actions - walker is folded for storage/transport
+const FOLDED_ACTIONS = [
   'store', 'stored', 'carry', 'carrying', 'fold', 'folded',
   'transport', 'transporting', 'pack', 'packed', 'beside',
-  'lean', 'leaning', 'rest', 'place', 'placed', 'corner'
+  'lean', 'leaning', 'place', 'placed', 'corner', 'lift', 'trunk'
 ];
 
 export function determineWalkerState(action: string): WalkerState {
   const normalizedAction = action.toLowerCase();
 
-  if (STORED_ACTIONS.some(a => normalizedAction.includes(a))) {
-    return 'STORED';
+  if (FOLDED_ACTIONS.some(a => normalizedAction.includes(a))) {
+    return 'FOLDED';
   }
 
-  // Default to IN_USE for most actions
-  return 'IN_USE';
+  // Default to UNFOLDED for most actions (active use)
+  return 'UNFOLDED';
 }
 
 export function getWalkerReferenceImageUrl(state: WalkerState): string {
-  return state === 'IN_USE' ? WALKER_IN_USE_IMAGE_URL : WALKER_STORED_IMAGE_URL;
+  return state === 'UNFOLDED' ? WALKER_UNFOLDED_IMAGE_URL : WALKER_FOLDED_IMAGE_URL;
 }
 
 // ============================================================================
@@ -167,7 +170,7 @@ ${emotionPrompt}
 IMAGE FORMAT (Composition & Structure):
 ${formatPrompt}
 
-Walker State: ${walkerState} (${walkerState === 'STORED' ? 'folded flat, stored or being carried' : 'in active use, user standing within the frame'})
+Walker State: ${walkerState} (${walkerState === 'FOLDED' ? 'folded flat, stored or being carried' : 'in active use, user standing within the frame'})
 `.trim();
   }
 
@@ -178,7 +181,7 @@ Environment: ${selection.A1} setting, specifically ${selection.A2}
 Action: ${selection.B}
 Characters: ${selection.C}
 Emotion/Mood: ${selection.D}
-Walker State: ${walkerState} (${walkerState === 'STORED' ? 'folded flat, stored or being carried' : 'in active use, user standing within the frame'})
+Walker State: ${walkerState} (${walkerState === 'FOLDED' ? 'folded flat, stored or being carried' : 'in active use, user standing within the frame'})
 `.trim();
 }
 
@@ -190,15 +193,15 @@ function buildWalkerUserPrompt(
   const context = buildWalkerContextString(selection, walkerState, contexts);
 
   // Scale and action guidance based on walker state
-  const stateGuidance = walkerState === 'STORED'
-    ? `STORED WALKER GUIDANCE:
+  const stateGuidance = walkerState === 'FOLDED'
+    ? `FOLDED WALKER GUIDANCE:
 - The walker is folded flat - approximately 8cm (3 inches) depth when collapsed
 - Maintains same height (80-95cm) and width (60-65cm) when folded
 - Can be leaned against a wall, stored in a closet, or placed in a car trunk
 - Lightweight aluminum frame - easily carried with one hand
 - Shows the convenience of compact storage
 - Example scenes: walker leaning against wall, stored in closet corner, being placed in car trunk, carried by caregiver`
-    : `IN-USE WALKER GUIDANCE (CRITICAL POSITIONING):
+    : `UNFOLDED WALKER GUIDANCE (CRITICAL POSITIONING):
 - The standard walker frame reaches waist to chest height (80-95cm / 32-37 inches)
 - Frame width approximately 60-65cm (24-26 inches) - user stands INSIDE the frame
 - Frame depth approximately 45-50cm (18-20 inches) front to back
@@ -392,8 +395,8 @@ export async function generateWalkerImages(
       success: false,
       imageUrls: [],
       prompt: '',
-      walkerState: 'IN_USE',
-      referenceImageUrl: WALKER_IN_USE_IMAGE_URL,
+      walkerState: 'UNFOLDED',
+      referenceImageUrl: WALKER_UNFOLDED_IMAGE_URL,
       error: 'GEMINI_API_KEY is not configured'
     };
   }
@@ -459,8 +462,8 @@ export async function generateWalkerImages(
       success: false,
       imageUrls: [],
       prompt: '',
-      walkerState: 'IN_USE',
-      referenceImageUrl: WALKER_IN_USE_IMAGE_URL,
+      walkerState: 'UNFOLDED',
+      referenceImageUrl: WALKER_UNFOLDED_IMAGE_URL,
       error: error instanceof Error ? error.message : 'Unknown error'
     };
   }
@@ -504,8 +507,8 @@ export async function generateWalkerImagesBatch(
   const chunks = Math.ceil(numberOfImages / chunkSize);
   const allImageUrls: string[] = [];
   let finalPrompt = '';
-  let finalState: WalkerState = 'IN_USE';
-  let finalRefUrl = WALKER_IN_USE_IMAGE_URL;
+  let finalState: WalkerState = 'UNFOLDED';
+  let finalRefUrl = WALKER_UNFOLDED_IMAGE_URL;
 
   for (let i = 0; i < chunks; i++) {
     const remaining = numberOfImages - i * chunkSize;
